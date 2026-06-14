@@ -1,0 +1,19 @@
+{
+  "AUROC": 0.8264,
+  "AUROC 95% CI": [
+    0.7718422013526406,
+    0.8866802595040676
+  ],
+  "AUPRC": 0.9349743929912929,
+  "AUPRC 95% CI": [
+    0.9009434482811367,
+    0.9657968521985697
+  ],
+  "Brier score": 0.15039379815974332,
+  "train rows": 600,
+  "test rows": 200,
+  "target": "disease_vs_normal",
+  "positive class": "AMD/DR/glaucoma",
+  "negative class": "normal",
+  "feature max dimension": 512
+}

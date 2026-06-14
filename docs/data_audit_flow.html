@@ -1,0 +1,495 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>retivasc Data Audit</title>
+<style>
+    :root {
+      color-scheme: light;
+      --bg: #f5f7f8;
+      --panel: #ffffff;
+      --ink: #1f2933;
+      --muted: #52616b;
+      --line: #d8e0e5;
+      --code-bg: #eef3f5;
+      --teal: #007f7a;
+      --blue: #2f5d8c;
+      --amber: #a45f00;
+      --rose: #b84545;
+      --green-bg: #e8f4ef;
+      --amber-bg: #fff4df;
+      --red-bg: #faeaea;
+      --shadow: 0 14px 35px rgba(31, 41, 51, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family:
+        Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+        sans-serif;
+      line-height: 1.5;
+    }
+
+    a {
+      color: inherit;
+    }
+
+    .report-shell {
+      width: min(1180px, calc(100% - 40px));
+      margin: 0 auto;
+    }
+
+    .report-header {
+      padding: 42px 0 26px;
+    }
+
+    .eyebrow {
+      margin: 0 0 8px;
+      color: var(--teal);
+      font-size: 0.75rem;
+      font-weight: 800;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    h1,
+    h2,
+    h3 {
+      letter-spacing: 0;
+      line-height: 1.15;
+    }
+
+    h1 {
+      max-width: 900px;
+      margin: 0;
+      font-size: clamp(2.1rem, 5vw, 4.3rem);
+    }
+
+    h2 {
+      margin: 0;
+      font-size: clamp(1.45rem, 3vw, 2.3rem);
+    }
+
+    h3 {
+      margin: 0;
+      font-size: 1rem;
+    }
+
+    .lede {
+      max-width: 820px;
+      margin: 18px 0 0;
+      color: var(--muted);
+      font-size: 1.08rem;
+    }
+
+    .status-strip,
+    .metrics-grid,
+    .method-grid,
+    .roadmap-grid {
+      display: grid;
+      gap: 14px;
+    }
+
+    .status-strip {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      margin-top: 28px;
+    }
+
+    .status-pill,
+    .metric-card,
+    .method-block,
+    .roadmap-item,
+    .note-block {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    .status-pill {
+      padding: 14px 16px;
+    }
+
+    .status-pill span,
+    .metric-card span {
+      display: block;
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .status-pill strong {
+      display: block;
+      margin-top: 4px;
+      font-size: 1.02rem;
+    }
+
+    main {
+      display: grid;
+      gap: 18px;
+      padding: 0 0 56px;
+    }
+
+    .panel {
+      padding: 26px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    .section-heading {
+      max-width: 820px;
+      margin-bottom: 20px;
+    }
+
+    .section-heading p:last-child {
+      margin-bottom: 0;
+      color: var(--muted);
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 18px;
+      align-items: start;
+    }
+
+    .callout {
+      padding: 18px;
+      border-left: 4px solid var(--teal);
+      border-radius: 8px;
+      background: #eef8f7;
+    }
+
+    .callout.warning {
+      border-left-color: var(--amber);
+      background: var(--amber-bg);
+    }
+
+    .callout p {
+      margin: 0;
+    }
+
+    .compact-list {
+      margin: 0;
+      padding-left: 20px;
+      color: var(--muted);
+    }
+
+    .compact-list li + li {
+      margin-top: 8px;
+    }
+
+    .metrics-grid {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .metric-card {
+      padding: 16px;
+    }
+
+    .metric-card strong {
+      display: block;
+      margin-top: 8px;
+      font-size: 1.8rem;
+      line-height: 1;
+    }
+
+    .metric-card em {
+      display: block;
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 0.86rem;
+      font-style: normal;
+    }
+
+    .method-grid,
+    .roadmap-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .method-block,
+    .roadmap-item,
+    .note-block {
+      padding: 18px;
+      box-shadow: none;
+    }
+
+    .method-block p,
+    .roadmap-item p,
+    .note-block p {
+      margin-bottom: 0;
+      color: var(--muted);
+    }
+
+    .calibration-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.25fr) minmax(280px, 0.75fr);
+      gap: 22px;
+      align-items: start;
+    }
+
+    figure {
+      margin: 0;
+    }
+
+    figure img {
+      display: block;
+      width: 100%;
+      height: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: white;
+    }
+
+    figcaption {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+
+    dl.data-list {
+      display: grid;
+      gap: 10px;
+      margin: 0;
+    }
+
+    dl.data-list div {
+      display: grid;
+      grid-template-columns: minmax(90px, 0.45fr) 1fr;
+      gap: 12px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    dt {
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    dd {
+      margin: 0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.92rem;
+    }
+
+    th,
+    td {
+      padding: 9px 10px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+    }
+
+    th {
+      color: var(--muted);
+      font-size: 0.76rem;
+      text-transform: uppercase;
+    }
+
+    code {
+      padding: 0.12rem 0.3rem;
+      border-radius: 5px;
+      background: var(--code-bg);
+      font-family:
+        "SFMono-Regular", Consolas, "Liberation Mono", Menlo, ui-monospace,
+        monospace;
+      font-size: 0.88em;
+    }
+
+    .audit-panel {
+      overflow: hidden;
+    }
+
+    .audit-timeline {
+      position: relative;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .audit-step {
+      display: grid;
+      grid-template-columns: 52px 1fr;
+      min-height: 100%;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfd;
+    }
+
+    .audit-index {
+      display: flex;
+      justify-content: center;
+      padding-top: 18px;
+      border-right: 1px solid var(--line);
+      background: #eef4f4;
+      border-radius: 8px 0 0 8px;
+    }
+
+    .audit-index span {
+      width: 30px;
+      height: 30px;
+      border-radius: 999px;
+      background: var(--teal);
+      color: white;
+      font-size: 0.78rem;
+      font-weight: 800;
+      line-height: 30px;
+      text-align: center;
+    }
+
+    .audit-body {
+      padding: 16px;
+    }
+
+    .audit-artifact {
+      margin: 0 0 8px;
+      color: var(--blue);
+      font-family:
+        "SFMono-Regular", Consolas, "Liberation Mono", Menlo, ui-monospace,
+        monospace;
+      font-size: 0.82rem;
+      font-weight: 700;
+    }
+
+    .audit-body > p:not(.audit-artifact) {
+      margin: 10px 0 12px;
+      color: var(--muted);
+    }
+
+    .code-ref-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 12px 0;
+    }
+
+    .code-ref {
+      display: inline-flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 150px;
+      padding: 8px 9px;
+      border: 1px solid #c9d8dc;
+      border-radius: 7px;
+      background: white;
+      color: var(--ink);
+      text-decoration: none;
+    }
+
+    .code-ref span {
+      color: var(--muted);
+      font-size: 0.74rem;
+    }
+
+    .check-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .check-list li {
+      padding: 5px 8px;
+      border-radius: 999px;
+      background: var(--green-bg);
+      color: #255443;
+      font-size: 0.76rem;
+      font-weight: 700;
+    }
+
+    .asset-list {
+      display: grid;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .asset-row {
+      display: grid;
+      grid-template-columns: 1fr minmax(220px, 0.8fr) 86px;
+      gap: 10px;
+      align-items: center;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .asset-row b {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      text-align: center;
+      text-transform: uppercase;
+    }
+
+    .available {
+      background: var(--green-bg);
+      color: #255443;
+    }
+
+    .pending {
+      background: var(--red-bg);
+      color: var(--rose);
+    }
+
+    .footer {
+      padding: 24px 0 42px;
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+
+    @media (max-width: 920px) {
+      .status-strip,
+      .metrics-grid,
+      .method-grid,
+      .roadmap-grid,
+      .audit-timeline,
+      .summary-grid,
+      .calibration-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .asset-row {
+        grid-template-columns: 1fr;
+      }
+
+      .panel {
+        padding: 20px;
+      }
+    }
+    </style>
+</head>
+<body>
+<div class="report-shell"><header class="report-header"><p class="eyebrow">retivasc audit artifact</p><h1>End-to-end data audit</h1><p class="lede">A standalone HTML view of the data operations and owning code paths used by the current FIVES pipeline.</p></header><main><section class="panel audit-panel" id="data-audit-flow"><div class="section-heading"><p class="eyebrow">End-to-end data audit</p><h2>What happens to the data, step by step</h2><p>This is rendered as HTML so the report remains readable, searchable, and paired with the code paths that perform each operation.</p></div><div class="audit-timeline"><article class="audit-step"><div class="audit-index"><span>01</span></div><div class="audit-body"><p class="audit-artifact">data/raw/fives/</p><h3>Raw data landing zone</h3><p>The official FIVES archive is unpacked locally. Fundus images and manual vessel masks remain outside version control.</p><div class="code-ref-list"><span class="code-ref"><code>src/retivasc/io.py</code><span>load_fives_manifest</span></span></div><ul class="check-list"><li>raw images stay gitignored</li>
+<li>official train/test folders retained</li></ul></div></article><article class="audit-step"><div class="audit-index"><span>02</span></div><div class="audit-body"><p class="audit-artifact">800 image-mask rows with label and official_split metadata</p><h3>Manifest audit</h3><p>Each fundus image is paired with its manual vessel mask. Dataset, image id, label, official split, and split group are normalized into a table.</p><div class="code-ref-list"><span class="code-ref"><code>src/retivasc/io.py</code><span>load_fives_manifest</span></span>
+<span class="code-ref"><code>notebooks/02_fives_modeling_calibration_demo.py</code><span>local data check</span></span></div><ul class="check-list"><li>image-mask pairing validated</li>
+<li>split metadata preserved</li></ul></div></article><article class="audit-step"><div class="audit-index"><span>03</span></div><div class="audit-body"><p class="audit-artifact">manual vessel mask arrays</p><h3>Mask preprocessing</h3><p>Mask PNGs are loaded, converted to grayscale, binarized, and downsampled to max dimension 512 for fast reproducible feature extraction.</p><div class="code-ref-list"><span class="code-ref"><code>src/retivasc/preprocess.py</code><span>ensure_grayscale</span></span>
+<span class="code-ref"><code>src/retivasc/preprocess.py</code><span>resize_mask_to_max_dim</span></span></div><ul class="check-list"><li>no synthetic masks created</li>
+<li>feature_max_dim recorded</li></ul></div></article><article class="audit-step"><div class="audit-index"><span>04</span></div><div class="audit-body"><p class="audit-artifact">one interpretable feature vector per image</p><h3>Vascular feature extraction</h3><p>The binary mask is skeletonized and summarized as density, skeleton length density, branchpoint density, fractal dimension, and connected components.</p><div class="code-ref-list"><span class="code-ref"><code>src/retivasc/features.py</code><span>extract_vascular_features</span></span>
+<span class="code-ref"><code>src/retivasc/skeleton.py</code><span>skeletonize_mask</span></span></div><ul class="check-list"><li>species-agnostic feature definitions</li>
+<li>derived table only</li></ul></div></article><article class="audit-step"><div class="audit-index"><span>05</span></div><div class="audit-body"><p class="audit-artifact">data/interim/fives_features_max512.parquet</p><h3>Feature cache</h3><p>The derived feature table is cached so report regeneration does not re-read and reprocess every raw mask.</p><div class="code-ref-list"><span class="code-ref"><code>notebooks/02_fives_modeling_calibration_demo.py</code><span>cache check</span></span>
+<span class="code-ref"><code>pandas.to_parquet</code></span></div><ul class="check-list"><li>800 cached rows expected</li>
+<li>cache includes feature_max_dim</li></ul></div></article><article class="audit-step"><div class="audit-index"><span>06</span></div><div class="audit-body"><p class="audit-artifact">600 train rows and 200 test rows</p><h3>Leakage-aware split</h3><p>The official FIVES split is used when present. Split groups are checked so the model cannot train and test on the same grouped unit.</p><div class="code-ref-list"><span class="code-ref"><code>src/retivasc/splits.py</code><span>assert_group_split_safe</span></span>
+<span class="code-ref"><code>sklearn Pipeline</code></span></div><ul class="check-list"><li>official split preferred</li>
+<li>group overlap rejected</li></ul></div></article><article class="audit-step"><div class="audit-index"><span>07</span></div><div class="audit-body"><p class="audit-artifact">figures/fives_calibration_demo.png, reports/fives_metrics.json</p><h3>Modeling and calibration</h3><p>A simple logistic model demonstrates evaluation discipline on FIVES disease-vs-normal labels using AUROC, AUPRC, Brier score, and bootstrap CIs.</p><div class="code-ref-list"><span class="code-ref"><code>src/retivasc/plotting.py</code><span>plot_calibration</span></span>
+<span class="code-ref"><code>sklearn.metrics</code></span></div><ul class="check-list"><li>calibration reported</li>
+<li>not an ADRD prediction claim</li></ul></div></article><article class="audit-step"><div class="audit-index"><span>08</span></div><div class="audit-body"><p class="audit-artifact">reports/retivasc_pi_demo.html</p><h3>Static PI report</h3><p>The deliverable consumes derived figures, cached features, metric JSON, explicit caveats, and this HTML audit trail.</p><div class="code-ref-list"><span class="code-ref"><code>src/retivasc/report_html.py</code><span>build_report</span></span></div><ul class="check-list"><li>raw files not embedded</li>
+<li>audit rendered as HTML</li></ul></div></article></div></section></main></div>
+</body>
+</html>

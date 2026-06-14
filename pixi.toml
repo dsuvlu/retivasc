@@ -1,0 +1,36 @@
+[workspace]
+name = "retivasc"
+version = "0.1.0"
+description = "Demo-sized retinal vascular computer-vision prototype."
+channels = ["conda-forge"]
+platforms = ["linux-64"]
+
+[dependencies]
+python = ">=3.11"
+numpy = "*"
+scipy = "*"
+pandas = "*"
+pyarrow = "*"
+scikit-image = "*"
+opencv = "*"
+matplotlib = "*"
+scikit-learn = "*"
+networkx = "*"
+pydantic = "*"
+marimo = "*"
+pytest = "*"
+ruff = "*"
+tqdm = "*"
+rich = "*"
+
+[pypi-dependencies]
+retivasc = { path = ".", editable = true }
+
+[tasks]
+test = "pytest -q"
+lint = "ruff check src tests notebooks"
+format = "ruff format src tests notebooks"
+rose-demo = "marimo run notebooks/01_rose_octa_feature_demo.py"
+fives-demo = "marimo run notebooks/02_fives_modeling_calibration_demo.py"
+report = "python -m retivasc.report_html"
+check = { depends-on = ["lint", "test"] }

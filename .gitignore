@@ -1,0 +1,13 @@
+.pixi/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+notebooks/__marimo__/
+
+# Do not commit raw or derived medical-image data.
+data/raw/
+data/interim/
+data/processed/
