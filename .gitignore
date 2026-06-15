@@ -11,10 +11,12 @@ notebooks/__marimo__/
 *.zip
 retivasc_hardening_spec.md
 retivasc_development_handoff.md
+demo_explanation.md
 
 # Do not commit raw or derived medical-image data.
 data/raw/
 data/interim/
 data/processed/
 figures/rose_*.png
+figures/tutorial_*_data_flow.png
 docs/assets/rose_*.png

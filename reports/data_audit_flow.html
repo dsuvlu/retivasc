@@ -262,6 +262,25 @@
       color: var(--muted);
     }
 
+    .method-block code {
+      display: inline-block;
+      margin-top: 12px;
+      color: var(--blue);
+      font-weight: 700;
+    }
+
+    .reference-card a {
+      display: inline-block;
+      margin-top: 12px;
+      color: var(--teal);
+      font-weight: 800;
+      text-decoration: none;
+    }
+
+    .reference-card a:hover {
+      text-decoration: underline;
+    }
+
     .calibration-layout {
       display: grid;
       grid-template-columns: minmax(0, 1.25fr) minmax(280px, 0.75fr);
@@ -348,56 +367,83 @@
       position: relative;
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 14px;
+      gap: 16px;
     }
 
     .audit-step {
       display: grid;
-      grid-template-columns: 52px 1fr;
+      grid-template-columns: 64px 1fr;
       min-height: 100%;
       border: 1px solid var(--line);
       border-radius: 8px;
       background: #fbfcfd;
+      box-shadow: 0 10px 24px rgba(31, 41, 51, 0.06);
     }
 
     .audit-index {
       display: flex;
       justify-content: center;
-      padding-top: 18px;
+      padding-top: 20px;
       border-right: 1px solid var(--line);
-      background: #eef4f4;
+      background: linear-gradient(180deg, #e8f4ef, #eef4f4);
       border-radius: 8px 0 0 8px;
     }
 
     .audit-index span {
-      width: 30px;
-      height: 30px;
+      width: 36px;
+      height: 36px;
       border-radius: 999px;
       background: var(--teal);
       color: white;
       font-size: 0.78rem;
       font-weight: 800;
-      line-height: 30px;
+      line-height: 36px;
       text-align: center;
     }
 
     .audit-body {
-      padding: 16px;
+      padding: 18px;
+    }
+
+    .audit-kind {
+      display: inline-block;
+      margin: 0 0 9px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: #e7eef7;
+      color: var(--blue);
+      font-size: 0.72rem;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .audit-plain {
+      margin: 10px 0 8px;
+      color: var(--ink);
+    }
+
+    .audit-detail {
+      margin: 0 0 12px;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .audit-artifact-label {
+      margin: 0 0 4px;
+      color: var(--muted);
+      font-size: 0.7rem;
+      font-weight: 800;
+      text-transform: uppercase;
     }
 
     .audit-artifact {
-      margin: 0 0 8px;
+      margin: 0 0 10px;
       color: var(--blue);
       font-family:
         "SFMono-Regular", Consolas, "Liberation Mono", Menlo, ui-monospace,
         monospace;
       font-size: 0.82rem;
       font-weight: 700;
-    }
-
-    .audit-body > p:not(.audit-artifact) {
-      margin: 10px 0 12px;
-      color: var(--muted);
     }
 
     .code-ref-list {
@@ -508,20 +554,34 @@
     </style>
 </head>
 <body>
-<div class="report-shell"><header class="report-header"><p class="eyebrow">retivasc audit artifact</p><h1>End-to-end data audit</h1><p class="lede">A standalone HTML view of the data operations and owning code paths used by the current FIVES pipeline.</p></header><main><section class="panel audit-panel" id="data-audit-flow"><div class="section-heading"><p class="eyebrow">End-to-end data audit</p><h2>What happens to the data, step by step</h2><p>This is rendered as HTML so the report remains readable, searchable, and directly linked to the code paths that perform each operation.</p></div><div class="audit-timeline"><article class="audit-step"><div class="audit-index"><span>01</span></div><div class="audit-body"><p class="audit-artifact">data/raw/fives/</p><h3>Raw data landing zone</h3><p>The official FIVES archive is unpacked locally. Fundus images and manual vessel masks remain outside version control.</p><div class="code-ref-list"><a class="code-ref" href="../src/retivasc/io.py"><code>src/retivasc/io.py</code><span>load_fives_manifest</span></a></div><ul class="check-list"><li>raw images stay gitignored</li>
-<li>official train/test folders retained</li></ul></div></article><article class="audit-step"><div class="audit-index"><span>02</span></div><div class="audit-body"><p class="audit-artifact">800 image-mask rows with label and official_split metadata</p><h3>Manifest audit</h3><p>Each fundus image is paired with its manual vessel mask. Dataset, image id, label, official split, and split group are normalized into a table.</p><div class="code-ref-list"><a class="code-ref" href="../src/retivasc/io.py"><code>src/retivasc/io.py</code><span>load_fives_manifest</span></a>
-<a class="code-ref" href="../notebooks/02_fives_modeling_calibration_demo.py"><code>notebooks/02_fives_modeling_calibration_demo.py</code><span>local data check</span></a></div><ul class="check-list"><li>image-mask pairing validated</li>
-<li>split metadata preserved</li></ul></div></article><article class="audit-step"><div class="audit-index"><span>03</span></div><div class="audit-body"><p class="audit-artifact">manual vessel mask arrays</p><h3>Mask preprocessing</h3><p>Mask PNGs are loaded, converted to grayscale, binarized, and downsampled to max dimension 512 for fast reproducible feature extraction.</p><div class="code-ref-list"><a class="code-ref" href="../src/retivasc/preprocess.py"><code>src/retivasc/preprocess.py</code><span>ensure_grayscale</span></a>
-<a class="code-ref" href="../src/retivasc/preprocess.py"><code>src/retivasc/preprocess.py</code><span>resize_mask_to_max_dim</span></a></div><ul class="check-list"><li>no synthetic masks created</li>
-<li>feature_max_dim recorded</li></ul></div></article><article class="audit-step"><div class="audit-index"><span>04</span></div><div class="audit-body"><p class="audit-artifact">one interpretable feature vector per image</p><h3>Vascular feature extraction</h3><p>The binary mask is skeletonized and summarized as density, skeleton length density, branchpoint density, fractal dimension, tortuosity, and connected components.</p><div class="code-ref-list"><a class="code-ref" href="../src/retivasc/features.py"><code>src/retivasc/features.py</code><span>extract_vascular_features</span></a>
-<a class="code-ref" href="../src/retivasc/skeleton.py"><code>src/retivasc/skeleton.py</code><span>skeletonize_mask</span></a></div><ul class="check-list"><li>species-agnostic feature definitions</li>
-<li>derived table only</li></ul></div></article><article class="audit-step"><div class="audit-index"><span>05</span></div><div class="audit-body"><p class="audit-artifact">data/interim/fives_features_max512.parquet</p><h3>Feature cache</h3><p>The derived feature table is cached so report regeneration does not re-read and reprocess every raw mask.</p><div class="code-ref-list"><a class="code-ref" href="../notebooks/02_fives_modeling_calibration_demo.py"><code>notebooks/02_fives_modeling_calibration_demo.py</code><span>cache check</span></a>
-<span class="code-ref"><code>pandas.to_parquet</code></span></div><ul class="check-list"><li>800 cached rows expected</li>
-<li>cache includes feature_max_dim</li></ul></div></article><article class="audit-step"><div class="audit-index"><span>06</span></div><div class="audit-body"><p class="audit-artifact">600 train rows and 200 test rows</p><h3>Leakage-aware split</h3><p>The official FIVES image-level split is used when present. Split groups are checked for image-disjoint evaluation, but patient-disjoint splitting is not possible without public patient identifiers.</p><div class="code-ref-list"><a class="code-ref" href="../src/retivasc/splits.py"><code>src/retivasc/splits.py</code><span>assert_group_split_safe</span></a>
-<span class="code-ref"><code>sklearn Pipeline</code></span></div><ul class="check-list"><li>official image-level split preferred</li>
-<li>patient identifiers unavailable</li></ul></div></article><article class="audit-step"><div class="audit-index"><span>07</span></div><div class="audit-body"><p class="audit-artifact">figures/fives_calibration_demo.png, reports/fives_metrics.json</p><h3>Modeling and calibration</h3><p>A simple logistic model demonstrates evaluation discipline on FIVES disease-vs-normal labels using AUROC, AUPRC, Brier score, and bootstrap CIs.</p><div class="code-ref-list"><a class="code-ref" href="../src/retivasc/plotting.py"><code>src/retivasc/plotting.py</code><span>plot_calibration</span></a>
-<span class="code-ref"><code>sklearn.metrics</code></span></div><ul class="check-list"><li>calibration reported</li>
-<li>not an ADRD prediction claim</li></ul></div></article><article class="audit-step"><div class="audit-index"><span>08</span></div><div class="audit-body"><p class="audit-artifact">reports/retivasc_pi_demo.html</p><h3>Static PI report</h3><p>The deliverable consumes derived figures, cached features, metric JSON, explicit caveats, and this HTML audit trail.</p><div class="code-ref-list"><a class="code-ref" href="../src/retivasc/report_html.py"><code>src/retivasc/report_html.py</code><span>build_report</span></a></div><ul class="check-list"><li>raw files not embedded</li>
+<div class="report-shell"><header class="report-header"><p class="eyebrow">retivasc audit artifact</p><h1>End-to-end data audit</h1><p class="lede">A standalone HTML view of the data operations and owning code paths used by the current FIVES pipeline.</p></header><main><section class="panel audit-panel" id="data-audit-flow"><div class="section-heading"><p class="eyebrow">End-to-end data audit</p><h2>What happens to the data, step by step</h2><p>The audit follows the package from local image files to masks, skeletons, features, baseline models, calibration, and the final static report. It is rendered as HTML so it remains readable, searchable, and directly linked to the code paths that perform each operation.</p></div><div class="audit-timeline"><article class="audit-step"><div class="audit-index"><span>01</span></div><div class="audit-body"><p class="audit-kind">Ingest</p><h3>Find and pair image data</h3><p class="audit-plain">The package first builds a tidy table where each retinal image is paired with its matching hand-drawn vessel mask.</p><p class="audit-detail">ROSE and FIVES loaders detect official folder layouts or read a local manifest. They normalize image ids, mask paths, labels when supplied, layer metadata, and split groups without downloading or committing medical images. Local data are expected under data/raw/rose/ and data/raw/fives/.</p><p class="audit-artifact-label">Output</p><p class="audit-artifact">manifest table with image_path and mask_path</p><div class="code-ref-list"><a class="code-ref" href="../src/retivasc/io.py"><code>src/retivasc/io.py</code><span>load_rose_manifest</span></a>
+<a class="code-ref" href="../src/retivasc/io.py"><code>src/retivasc/io.py</code><span>load_fives_manifest</span></a></div><ul class="check-list"><li>raw images stay local</li>
+<li>image-mask pairing checked</li>
+<li>no labels guessed</li></ul></div></article><article class="audit-step"><div class="audit-index"><span>02</span></div><div class="audit-body"><p class="audit-kind">Prepare</p><h3>Tidy images and masks</h3><p class="audit-plain">Color images are converted to grayscale, brightness is normalized, and large masks are resized for a quick demo run.</p><p class="audit-detail">The preprocessing helpers standardize inputs before segmentation and feature extraction, while preserving binary mask semantics.</p><p class="audit-artifact-label">Output</p><p class="audit-artifact">normalized arrays for fast processing</p><div class="code-ref-list"><a class="code-ref" href="../src/retivasc/preprocess.py"><code>src/retivasc/preprocess.py</code><span>ensure_grayscale</span></a>
+<a class="code-ref" href="../src/retivasc/preprocess.py"><code>src/retivasc/preprocess.py</code><span>resize_mask_to_max_dim</span></a></div><ul class="check-list"><li>grayscale conversion</li>
+<li>brightness normalized</li>
+<li>mask remains binary</li></ul></div></article><article class="audit-step"><div class="audit-index"><span>03</span></div><div class="audit-body"><p class="audit-kind">Baseline</p><h3>Run the classical vessel detector</h3><p class="audit-plain">A classic ridge detector lights up thin tube-like structures, thresholds that response, and removes small specks.</p><p class="audit-detail">The Frangi filter is used as an untrained, GPU-free floor for vessel detection. For this demo it is a baseline, not the final computer-vision claim.</p><p class="audit-artifact-label">Output</p><p class="audit-artifact">binary baseline vessel mask</p><div class="code-ref-list"><a class="code-ref" href="../src/retivasc/segment.py"><code>src/retivasc/segment.py</code><span>classical_vesselness_mask</span></a>
+<a class="code-ref" href="../src/retivasc/segment.py"><code>src/retivasc/segment.py</code><span>cleanup_mask</span></a></div><ul class="check-list"><li>Frangi vesselness</li>
+<li>Otsu/Yen/percentile threshold</li>
+<li>morphology cleanup</li></ul></div></article><article class="audit-step"><div class="audit-index"><span>04</span></div><div class="audit-body"><p class="audit-kind">Graph</p><h3>Trace skeletons and junctions</h3><p class="audit-plain">The vessel map is thinned to a centerline, then branch points and endpoints are marked so the vascular network can be measured.</p><p class="audit-detail">Skeletonization turns vessel blobs into graph-like structure, making length, branching, and tortuosity easier to quantify.</p><p class="audit-artifact-label">Output</p><p class="audit-artifact">one-pixel centerline plus branch points</p><div class="code-ref-list"><a class="code-ref" href="../src/retivasc/skeleton.py"><code>src/retivasc/skeleton.py</code><span>skeletonize_mask</span></a>
+<a class="code-ref" href="../src/retivasc/skeleton.py"><code>src/retivasc/skeleton.py</code><span>branchpoint_mask</span></a></div><ul class="check-list"><li>centerline extracted</li>
+<li>junctions counted</li>
+<li>endpoints available</li></ul></div></article><article class="audit-step"><div class="audit-index"><span>05</span></div><div class="audit-body"><p class="audit-kind">Measure</p><h3>Extract vascular features</h3><p class="audit-plain">Each mask is reduced to interpretable numbers: vessel density, centerline length, branch density, fractal dimension, tortuosity, and component count.</p><p class="audit-detail">These feature definitions are intentionally species-agnostic so the same code can later be applied to human and mouse retinal images.</p><p class="audit-artifact-label">Output</p><p class="audit-artifact">vascular fingerprint per image</p><div class="code-ref-list"><a class="code-ref" href="../src/retivasc/features.py"><code>src/retivasc/features.py</code><span>extract_vascular_features</span></a>
+<a class="code-ref" href="../src/retivasc/features.py"><code>src/retivasc/features.py</code><span>segment_tortuosity</span></a></div><ul class="check-list"><li>interpretable features</li>
+<li>no synthetic biomarkers</li>
+<li>derived table only</li></ul></div></article><article class="audit-step"><div class="audit-index"><span>06</span></div><div class="audit-body"><p class="audit-kind">Score</p><h3>Grade segmentation overlap</h3><p class="audit-plain">Predicted vessel masks can be compared against manual masks to score overlap and separate missed vessels from false vessel pixels.</p><p class="audit-detail">Dice and IoU focus on foreground vessel overlap, while sensitivity and specificity separate true-vessel recovery from background rejection.</p><p class="audit-artifact-label">Output</p><p class="audit-artifact">Dice, IoU, sensitivity, specificity</p><div class="code-ref-list"><a class="code-ref" href="../src/retivasc/metrics.py"><code>src/retivasc/metrics.py</code><span>dice_score</span></a>
+<a class="code-ref" href="../src/retivasc/metrics.py"><code>src/retivasc/metrics.py</code><span>iou_score</span></a></div><ul class="check-list"><li>foreground metrics</li>
+<li>empty-mask conventions tested</li>
+<li>same-shape masks required</li></ul></div></article><article class="audit-step"><div class="audit-index"><span>07</span></div><div class="audit-body"><p class="audit-kind">Split</p><h3>Split data without leakage</h3><p class="audit-plain">The model is trained on one group of images and tested on a held-out group, with explicit checks against group overlap.</p><p class="audit-detail">FIVES only supports the official image-level split in the public release. The report states that this is image-disjoint, not patient-disjoint.</p><p class="audit-artifact-label">Output</p><p class="audit-artifact">train/test groups and leakage checks</p><div class="code-ref-list"><a class="code-ref" href="../src/retivasc/splits.py"><code>src/retivasc/splits.py</code><span>assert_group_split_safe</span></a></div><ul class="check-list"><li>group overlap rejected</li>
+<li>split level stated</li>
+<li>patient IDs not invented</li></ul></div></article><article class="audit-step"><div class="audit-index"><span>08</span></div><div class="audit-body"><p class="audit-kind">Model</p><h3>Fit the classification baseline</h3><p class="audit-plain">A simple logistic regression uses the vascular feature table to separate diseased from normal FIVES fundus images.</p><p class="audit-detail">The scikit-learn pipeline standardizes features, applies L2-regularized logistic regression, and uses class balancing for the 75/25 test-set base rate.</p><p class="audit-artifact-label">Output</p><p class="audit-artifact">disease-vs-normal logistic baseline</p><div class="code-ref-list"><a class="code-ref" href="../notebooks/02_fives_modeling_calibration_demo.py"><code>notebooks/02_fives_modeling_calibration_demo.py</code><span>make_pipeline</span></a>
+<span class="code-ref"><code>StandardScaler + LogisticRegression</code></span></div><ul class="check-list"><li>interpretable model</li>
+<li>training-only scaling</li>
+<li>not an ADRD model</li></ul></div></article><article class="audit-step"><div class="audit-index"><span>09</span></div><div class="audit-body"><p class="audit-kind">Validate</p><h3>Report ranking and calibration</h3><p class="audit-plain">The demo reports whether the baseline ranks examples well and whether its probabilities are trustworthy.</p><p class="audit-detail">AUROC and AUPRC are ranking metrics. Brier score and the reliability diagram test probability calibration, which matters for any future risk model.</p><p class="audit-artifact-label">Output</p><p class="audit-artifact">AUROC, AUPRC, Brier score, calibration curve</p><div class="code-ref-list"><a class="code-ref" href="../src/retivasc/plotting.py"><code>src/retivasc/plotting.py</code><span>plot_calibration</span></a>
+<span class="code-ref"><code>sklearn.metrics</code></span></div><ul class="check-list"><li>bootstrap CIs</li>
+<li>prevalence caveat</li>
+<li>calibration shown</li></ul></div></article><article class="audit-step"><div class="audit-index"><span>10</span></div><div class="audit-body"><p class="audit-kind">Publish</p><h3>Build the static report</h3><p class="audit-plain">The report collects the figures, metrics, citations, and caveats into one static artifact that can be inspected locally or published from docs.</p><p class="audit-detail">The public report can include a real FIVES processing example generated from local data. ROSE-derived image panels remain local-only by default.</p><p class="audit-artifact-label">Output</p><p class="audit-artifact">reports/retivasc_pi_demo.html and docs/index.html</p><div class="code-ref-list"><a class="code-ref" href="../src/retivasc/report_html.py"><code>src/retivasc/report_html.py</code><span>build_report</span></a></div><ul class="check-list"><li>ROSE images not embedded</li>
+<li>dataset links included</li>
 <li>audit rendered as HTML</li></ul></div></article></div></section></main></div>
 </body>
 </html>

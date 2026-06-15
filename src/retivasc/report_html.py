@@ -11,128 +11,205 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
+from skimage import io as skio
 
-from retivasc.report_text import (
-    FEATURE_SCALING_CAVEAT,
-    FIVES_SPLIT_CAVEAT,
-    ROSE_MANUAL_MASK_CAVEAT,
-    ROSE_NO_PREDICTION_CAVEAT,
-)
+from retivasc.io import DataNotFoundError, load_fives_manifest
+from retivasc.plotting import plot_processing_example_panel
+from retivasc.report_text import FIVES_SPLIT_CAVEAT
 
 DATA_AUDIT_STEPS: list[dict[str, Any]] = [
     {
         "number": "01",
-        "stage": "Raw data landing zone",
-        "artifact": "data/raw/fives/",
-        "operation": (
-            "The official FIVES archive is unpacked locally. Fundus images and manual "
-            "vessel masks remain outside version control."
+        "kind": "Ingest",
+        "stage": "Find and pair image data",
+        "artifact": "manifest table with image_path and mask_path",
+        "plain": (
+            "The package first builds a tidy table where each retinal image is paired with "
+            "its matching hand-drawn vessel mask."
         ),
-        "code": [{"path": "src/retivasc/io.py", "symbol": "load_fives_manifest"}],
-        "checks": ["raw images stay gitignored", "official train/test folders retained"],
+        "detail": (
+            "ROSE and FIVES loaders detect official folder layouts or read a local manifest. "
+            "They normalize image ids, mask paths, labels when supplied, layer metadata, and "
+            "split groups without downloading or committing medical images. Local data are "
+            "expected under data/raw/rose/ and data/raw/fives/."
+        ),
+        "code": [
+            {"path": "src/retivasc/io.py", "symbol": "load_rose_manifest"},
+            {"path": "src/retivasc/io.py", "symbol": "load_fives_manifest"},
+        ],
+        "checks": ["raw images stay local", "image-mask pairing checked", "no labels guessed"],
     },
     {
         "number": "02",
-        "stage": "Manifest audit",
-        "artifact": "800 image-mask rows with label and official_split metadata",
-        "operation": (
-            "Each fundus image is paired with its manual vessel mask. Dataset, image id, "
-            "label, official split, and split group are normalized into a table."
+        "kind": "Prepare",
+        "stage": "Tidy images and masks",
+        "artifact": "normalized arrays for fast processing",
+        "plain": (
+            "Color images are converted to grayscale, brightness is normalized, and large "
+            "masks are resized for a quick demo run."
         ),
-        "code": [
-            {"path": "src/retivasc/io.py", "symbol": "load_fives_manifest"},
-            {
-                "path": "notebooks/02_fives_modeling_calibration_demo.py",
-                "symbol": "local data check",
-            },
-        ],
-        "checks": ["image-mask pairing validated", "split metadata preserved"],
-    },
-    {
-        "number": "03",
-        "stage": "Mask preprocessing",
-        "artifact": "manual vessel mask arrays",
-        "operation": (
-            "Mask PNGs are loaded, converted to grayscale, binarized, and downsampled "
-            "to max dimension 512 for fast reproducible feature extraction."
+        "detail": (
+            "The preprocessing helpers standardize inputs before segmentation and feature "
+            "extraction, while preserving binary mask semantics."
         ),
         "code": [
             {"path": "src/retivasc/preprocess.py", "symbol": "ensure_grayscale"},
             {"path": "src/retivasc/preprocess.py", "symbol": "resize_mask_to_max_dim"},
         ],
-        "checks": ["no synthetic masks created", "feature_max_dim recorded"],
+        "checks": ["grayscale conversion", "brightness normalized", "mask remains binary"],
+    },
+    {
+        "number": "03",
+        "kind": "Baseline",
+        "stage": "Run the classical vessel detector",
+        "artifact": "binary baseline vessel mask",
+        "plain": (
+            "A classic ridge detector lights up thin tube-like structures, thresholds that "
+            "response, and removes small specks."
+        ),
+        "detail": (
+            "The Frangi filter is used as an untrained, GPU-free floor for vessel detection. "
+            "For this demo it is a baseline, not the final computer-vision claim."
+        ),
+        "code": [
+            {"path": "src/retivasc/segment.py", "symbol": "classical_vesselness_mask"},
+            {"path": "src/retivasc/segment.py", "symbol": "cleanup_mask"},
+        ],
+        "checks": ["Frangi vesselness", "Otsu/Yen/percentile threshold", "morphology cleanup"],
     },
     {
         "number": "04",
-        "stage": "Vascular feature extraction",
-        "artifact": "one interpretable feature vector per image",
-        "operation": (
-            "The binary mask is skeletonized and summarized as density, skeleton length "
-            "density, branchpoint density, fractal dimension, tortuosity, and connected "
-            "components."
+        "kind": "Graph",
+        "stage": "Trace skeletons and junctions",
+        "artifact": "one-pixel centerline plus branch points",
+        "plain": (
+            "The vessel map is thinned to a centerline, then branch points and endpoints "
+            "are marked so the vascular network can be measured."
+        ),
+        "detail": (
+            "Skeletonization turns vessel blobs into graph-like structure, making length, "
+            "branching, and tortuosity easier to quantify."
         ),
         "code": [
-            {"path": "src/retivasc/features.py", "symbol": "extract_vascular_features"},
             {"path": "src/retivasc/skeleton.py", "symbol": "skeletonize_mask"},
+            {"path": "src/retivasc/skeleton.py", "symbol": "branchpoint_mask"},
         ],
-        "checks": ["species-agnostic feature definitions", "derived table only"],
+        "checks": ["centerline extracted", "junctions counted", "endpoints available"],
     },
     {
         "number": "05",
-        "stage": "Feature cache",
-        "artifact": "data/interim/fives_features_max512.parquet",
-        "operation": (
-            "The derived feature table is cached so report regeneration does not re-read "
-            "and reprocess every raw mask."
+        "kind": "Measure",
+        "stage": "Extract vascular features",
+        "artifact": "vascular fingerprint per image",
+        "plain": (
+            "Each mask is reduced to interpretable numbers: vessel density, centerline "
+            "length, branch density, fractal dimension, tortuosity, and component count."
+        ),
+        "detail": (
+            "These feature definitions are intentionally species-agnostic so the same code "
+            "can later be applied to human and mouse retinal images."
+        ),
+        "code": [
+            {"path": "src/retivasc/features.py", "symbol": "extract_vascular_features"},
+            {"path": "src/retivasc/features.py", "symbol": "segment_tortuosity"},
+        ],
+        "checks": ["interpretable features", "no synthetic biomarkers", "derived table only"],
+    },
+    {
+        "number": "06",
+        "kind": "Score",
+        "stage": "Grade segmentation overlap",
+        "artifact": "Dice, IoU, sensitivity, specificity",
+        "plain": (
+            "Predicted vessel masks can be compared against manual masks to score overlap "
+            "and separate missed vessels from false vessel pixels."
+        ),
+        "detail": (
+            "Dice and IoU focus on foreground vessel overlap, while sensitivity and "
+            "specificity separate true-vessel recovery from background rejection."
+        ),
+        "code": [
+            {"path": "src/retivasc/metrics.py", "symbol": "dice_score"},
+            {"path": "src/retivasc/metrics.py", "symbol": "iou_score"},
+        ],
+        "checks": [
+            "foreground metrics",
+            "empty-mask conventions tested",
+            "same-shape masks required",
+        ],
+    },
+    {
+        "number": "07",
+        "kind": "Split",
+        "stage": "Split data without leakage",
+        "artifact": "train/test groups and leakage checks",
+        "plain": (
+            "The model is trained on one group of images and tested on a held-out group, "
+            "with explicit checks against group overlap."
+        ),
+        "detail": (
+            "FIVES only supports the official image-level split in the public release. "
+            "The report states that this is image-disjoint, not patient-disjoint."
+        ),
+        "code": [{"path": "src/retivasc/splits.py", "symbol": "assert_group_split_safe"}],
+        "checks": ["group overlap rejected", "split level stated", "patient IDs not invented"],
+    },
+    {
+        "number": "08",
+        "kind": "Model",
+        "stage": "Fit the classification baseline",
+        "artifact": "disease-vs-normal logistic baseline",
+        "plain": (
+            "A simple logistic regression uses the vascular feature table to separate "
+            "diseased from normal FIVES fundus images."
+        ),
+        "detail": (
+            "The scikit-learn pipeline standardizes features, applies L2-regularized "
+            "logistic regression, and uses class balancing for the 75/25 test-set base rate."
         ),
         "code": [
             {
                 "path": "notebooks/02_fives_modeling_calibration_demo.py",
-                "symbol": "cache check",
+                "symbol": "make_pipeline",
             },
-            {"label": "pandas.to_parquet"},
+            {"label": "StandardScaler + LogisticRegression"},
         ],
-        "checks": ["800 cached rows expected", "cache includes feature_max_dim"],
+        "checks": ["interpretable model", "training-only scaling", "not an ADRD model"],
     },
     {
-        "number": "06",
-        "stage": "Leakage-aware split",
-        "artifact": "600 train rows and 200 test rows",
-        "operation": (
-            "The official FIVES image-level split is used when present. Split groups are "
-            "checked for image-disjoint evaluation, but patient-disjoint splitting is not "
-            "possible without public patient identifiers."
+        "number": "09",
+        "kind": "Validate",
+        "stage": "Report ranking and calibration",
+        "artifact": "AUROC, AUPRC, Brier score, calibration curve",
+        "plain": (
+            "The demo reports whether the baseline ranks examples well and whether its "
+            "probabilities are trustworthy."
         ),
-        "code": [
-            {"path": "src/retivasc/splits.py", "symbol": "assert_group_split_safe"},
-            {"label": "sklearn Pipeline"},
-        ],
-        "checks": ["official image-level split preferred", "patient identifiers unavailable"],
-    },
-    {
-        "number": "07",
-        "stage": "Modeling and calibration",
-        "artifact": "figures/fives_calibration_demo.png, reports/fives_metrics.json",
-        "operation": (
-            "A simple logistic model demonstrates evaluation discipline on FIVES "
-            "disease-vs-normal labels using AUROC, AUPRC, Brier score, and bootstrap CIs."
+        "detail": (
+            "AUROC and AUPRC are ranking metrics. Brier score and the reliability diagram "
+            "test probability calibration, which matters for any future risk model."
         ),
         "code": [
             {"path": "src/retivasc/plotting.py", "symbol": "plot_calibration"},
             {"label": "sklearn.metrics"},
         ],
-        "checks": ["calibration reported", "not an ADRD prediction claim"],
+        "checks": ["bootstrap CIs", "prevalence caveat", "calibration shown"],
     },
     {
-        "number": "08",
-        "stage": "Static PI report",
-        "artifact": "reports/retivasc_pi_demo.html",
-        "operation": (
-            "The deliverable consumes derived figures, cached features, metric JSON, "
-            "explicit caveats, and this HTML audit trail."
+        "number": "10",
+        "kind": "Publish",
+        "stage": "Build the static report",
+        "artifact": "reports/retivasc_pi_demo.html and docs/index.html",
+        "plain": (
+            "The report collects the figures, metrics, citations, and caveats into one "
+            "static artifact that can be inspected locally or published from docs."
+        ),
+        "detail": (
+            "The public report can include a real FIVES processing example generated from "
+            "local data. ROSE-derived image panels remain local-only by default."
         ),
         "code": [{"path": "src/retivasc/report_html.py", "symbol": "build_report"}],
-        "checks": ["raw files not embedded", "audit rendered as HTML"],
+        "checks": ["ROSE images not embedded", "dataset links included", "audit rendered as HTML"],
     },
 ]
 
@@ -265,6 +342,108 @@ def _metric_card(label: str, value: str, detail: str) -> str:
     )
 
 
+def _method_block(title: str, body: str, code: str) -> str:
+    return (
+        '<article class="method-block">'
+        f"<h3>{escape(title)}</h3>"
+        f"<p>{escape(body)}</p>"
+        f"<code>{escape(code)}</code>"
+        "</article>"
+    )
+
+
+def _dataset_reference_cards() -> str:
+    references = [
+        {
+            "title": "ROSE OCTA vessel segmentation dataset",
+            "body": (
+                "Used here as the OCTA computer-vision scaffold for local ingestion, "
+                "manual-mask feature extraction, and skeletonization. ROSE-derived image "
+                "examples are not published by default."
+            ),
+            "url": "https://zenodo.org/records/12775880",
+            "label": "Zenodo record",
+        },
+        {
+            "title": "FIVES fundus vessel segmentation dataset",
+            "body": (
+                "Used here for the larger-scale modeling and calibration demonstration on "
+                "manual vessel masks and disease-vs-normal labels."
+            ),
+            "url": "https://www.nature.com/articles/s41597-022-01564-3",
+            "label": "Scientific Data article",
+        },
+    ]
+    cards = []
+    for ref in references:
+        cards.append(
+            '<article class="method-block reference-card">'
+            f"<h3>{escape(ref['title'])}</h3>"
+            f"<p>{escape(ref['body'])}</p>"
+            f'<a href="{escape(ref["url"])}" target="_blank" rel="noopener noreferrer">'
+            f"{escape(ref['label'])}"
+            "</a>"
+            "</article>"
+        )
+    return "\n".join(cards)
+
+
+def _processing_method_blocks() -> str:
+    blocks = [
+        (
+            "Baseline vessel segmentation",
+            (
+                "The segmentation baseline is an untrained Frangi ridge detector followed "
+                "by thresholding and morphology cleanup. It is a transparent floor, not a "
+                "state-of-the-art model."
+            ),
+            "segment.py",
+        ),
+        (
+            "Manual-mask feature extraction",
+            (
+                "Manual vessel masks are converted into a small vascular fingerprint: "
+                "density, skeleton length, branch density, fractal dimension, tortuosity, "
+                "and component count."
+            ),
+            "features.py",
+        ),
+        (
+            "Skeleton and graph structure",
+            (
+                "The mask is thinned to a one-pixel centerline so branch points, endpoints, "
+                "network length, and curviness can be measured consistently."
+            ),
+            "skeleton.py",
+        ),
+        (
+            "Segmentation scoring",
+            (
+                "Dice, IoU, sensitivity, and specificity compare a predicted vessel mask "
+                "against a manual vessel tracing without being dominated by background pixels."
+            ),
+            "metrics.py",
+        ),
+        (
+            "Classification baseline",
+            (
+                "The FIVES model standardizes the vascular features and fits a small "
+                "L2-regularized logistic regression with class balancing."
+            ),
+            "notebook 02",
+        ),
+        (
+            "Calibration reporting",
+            (
+                "AUROC and AUPRC describe ranking. The Brier score and calibration curve "
+                "ask whether predicted probabilities are numerically trustworthy."
+            ),
+            "plotting.py",
+        ),
+    ]
+    return "\n".join(_method_block(title, body, code) for title, body, code in blocks)
+
+
 def _table_rows(values: dict[str, int]) -> str:
     if not values:
         return '<tr><td colspan="2">Pending</td></tr>'
@@ -276,6 +455,7 @@ def _table_rows(values: dict[str, int]) -> str:
 
 def _render_asset_status(root: Path) -> str:
     assets = {
+        "Processing example panel": "figures/processing_example_panel.png",
         "FIVES calibration figure": "figures/fives_calibration_demo.png",
         "FIVES metrics JSON": "reports/fives_metrics.json",
         "FIVES feature cache": "data/interim/fives_features_max512.parquet",
@@ -311,9 +491,12 @@ def render_data_audit_component(code_href_prefix: str | None = "../") -> str:
             f"<span>{escape(step['number'])}</span>"
             "</div>"
             '<div class="audit-body">'
-            f'<p class="audit-artifact">{escape(step["artifact"])}</p>'
+            f'<p class="audit-kind">{escape(step["kind"])}</p>'
             f"<h3>{escape(step['stage'])}</h3>"
-            f"<p>{escape(step['operation'])}</p>"
+            f'<p class="audit-plain">{escape(step["plain"])}</p>'
+            f'<p class="audit-detail">{escape(step["detail"])}</p>'
+            '<p class="audit-artifact-label">Output</p>'
+            f'<p class="audit-artifact">{escape(step["artifact"])}</p>'
             '<div class="code-ref-list">'
             f"{code_refs}"
             "</div>"
@@ -330,8 +513,9 @@ def render_data_audit_component(code_href_prefix: str | None = "../") -> str:
         '<p class="eyebrow">End-to-end data audit</p>'
         "<h2>What happens to the data, step by step</h2>"
         "<p>"
-        "This is rendered as HTML so the report remains readable, searchable, and "
-        f"{code_context}."
+        "The audit follows the package from local image files to masks, skeletons, "
+        "features, baseline models, calibration, and the final static report. It is "
+        f"rendered as HTML so it remains readable, searchable, and {code_context}."
         "</p>"
         "</div>"
         '<div class="audit-timeline">'
@@ -600,6 +784,25 @@ def _styles() -> str:
       color: var(--muted);
     }
 
+    .method-block code {
+      display: inline-block;
+      margin-top: 12px;
+      color: var(--blue);
+      font-weight: 700;
+    }
+
+    .reference-card a {
+      display: inline-block;
+      margin-top: 12px;
+      color: var(--teal);
+      font-weight: 800;
+      text-decoration: none;
+    }
+
+    .reference-card a:hover {
+      text-decoration: underline;
+    }
+
     .calibration-layout {
       display: grid;
       grid-template-columns: minmax(0, 1.25fr) minmax(280px, 0.75fr);
@@ -686,56 +889,83 @@ def _styles() -> str:
       position: relative;
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 14px;
+      gap: 16px;
     }
 
     .audit-step {
       display: grid;
-      grid-template-columns: 52px 1fr;
+      grid-template-columns: 64px 1fr;
       min-height: 100%;
       border: 1px solid var(--line);
       border-radius: 8px;
       background: #fbfcfd;
+      box-shadow: 0 10px 24px rgba(31, 41, 51, 0.06);
     }
 
     .audit-index {
       display: flex;
       justify-content: center;
-      padding-top: 18px;
+      padding-top: 20px;
       border-right: 1px solid var(--line);
-      background: #eef4f4;
+      background: linear-gradient(180deg, #e8f4ef, #eef4f4);
       border-radius: 8px 0 0 8px;
     }
 
     .audit-index span {
-      width: 30px;
-      height: 30px;
+      width: 36px;
+      height: 36px;
       border-radius: 999px;
       background: var(--teal);
       color: white;
       font-size: 0.78rem;
       font-weight: 800;
-      line-height: 30px;
+      line-height: 36px;
       text-align: center;
     }
 
     .audit-body {
-      padding: 16px;
+      padding: 18px;
+    }
+
+    .audit-kind {
+      display: inline-block;
+      margin: 0 0 9px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: #e7eef7;
+      color: var(--blue);
+      font-size: 0.72rem;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .audit-plain {
+      margin: 10px 0 8px;
+      color: var(--ink);
+    }
+
+    .audit-detail {
+      margin: 0 0 12px;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .audit-artifact-label {
+      margin: 0 0 4px;
+      color: var(--muted);
+      font-size: 0.7rem;
+      font-weight: 800;
+      text-transform: uppercase;
     }
 
     .audit-artifact {
-      margin: 0 0 8px;
+      margin: 0 0 10px;
       color: var(--blue);
       font-family:
         "SFMono-Regular", Consolas, "Liberation Mono", Menlo, ui-monospace,
         monospace;
       font-size: 0.82rem;
       font-weight: 700;
-    }
-
-    .audit-body > p:not(.audit-artifact) {
-      margin: 10px 0 12px;
-      color: var(--muted);
     }
 
     .code-ref-list {
@@ -873,8 +1103,10 @@ def render_report(
     project_root = Path(root)
     metrics = _read_metrics(project_root)
     cache_summary = _feature_cache_summary(project_root)
+    processing_example_available = _path_exists(
+        project_root, "figures/processing_example_panel.png"
+    )
     calibration_available = _path_exists(project_root, "figures/fives_calibration_demo.png")
-    cross_species_available = _path_exists(project_root, "figures/cross_species_roadmap.png")
 
     metric_cards = "\n".join(
         [
@@ -914,6 +1146,30 @@ def render_report(
         "Feature cache rows": cache_summary.get("rows", "Pending"),
     }
 
+    if processing_example_available:
+        processing_example_figure = (
+            "<figure>"
+            f'<img src="{escape(asset_prefix)}/processing_example_panel.png" '
+            'alt="FIVES fundus image, manual vessel mask, baseline mask, and skeleton">'
+            "<figcaption>"
+            "Real FIVES fundus example showing the package's processing stages: image, "
+            "manual vessel mask, classical baseline mask, and manual-mask skeleton. The "
+            "baseline mask is deliberately simple and may be noisy; the manual mask drives "
+            "the feature extraction shown in this demo."
+            "</figcaption>"
+            "</figure>"
+        )
+    else:
+        processing_example_figure = (
+            '<div class="callout warning">'
+            "<p>"
+            "The real-image processing example has not been generated because local FIVES "
+            "data are unavailable. Place FIVES under <code>data/raw/fives/</code> and run "
+            "<code>pixi run report</code>."
+            "</p>"
+            "</div>"
+        )
+
     if calibration_available:
         calibration_figure = (
             "<figure>"
@@ -935,59 +1191,17 @@ def render_report(
             "</div>"
         )
 
-    if cross_species_available:
-        cross_species_figure = (
-            "<figure>"
-            f'<img src="{escape(asset_prefix)}/cross_species_roadmap.png" '
-            'alt="Cross-species retinal vascular feature roadmap">'
-            "<figcaption>"
-            "The same feature definitions can be applied to human retinal imaging and "
-            "Howell/Reagan mouse retina studies, then aligned with biomarker, genomic, "
-            "and clinical context once project data are available."
-            "</figcaption>"
-            "</figure>"
-        )
-    else:
-        cross_species_figure = (
-            '<div class="callout warning">'
-            "<p>"
-            "The cross-species roadmap figure has not been generated. Run notebook 03 or "
-            "<code>plot_cross_species_roadmap</code> before publishing the report."
-            "</p>"
-            "</div>"
-        )
-
-    rose_figures = (
-        '<div class="public-placeholder">'
-        '<div class="pipeline-schematic" aria-label="ROSE OCTA processing schematic">'
-        "<span>Raw OCTA</span>"
-        "<span>Manual annotation</span>"
-        "<span>Classical baseline overlay</span>"
-        "<span>Manual-mask skeleton</span>"
-        "</div>"
-        "<p>"
-        "ROSE-derived visual panels are generated locally and intentionally omitted from "
-        "public reports unless the dataset terms permit redistribution of image examples."
-        "</p>"
-        "<p>"
-        "Grouped by available layer and subset metadata, not by disease status. Absolute "
-        "magnitudes differ across layers and ROSE subsets largely because of annotation "
-        "density and acquisition, so these distributions are a computer-vision sanity "
-        "check, not a biological comparison."
-        "</p>"
-        "</div>"
-    )
-
     generated = date.today().isoformat()
     body = f"""
     <div class="report-shell">
       <header class="report-header">
         <p class="eyebrow">retivasc prototype report</p>
-        <h1>Retinal vascular computer-vision scaffold for ADRD biomarker work</h1>
+        <h1>Retinal vascular data processing demo</h1>
         <p class="lede">
-          A compact, auditable pipeline for moving retinal vessel masks from local
-          medical-image files into interpretable vascular features, leakage-aware
-          validation, calibration diagnostics, and a future multimodal Roux/JAX workflow.
+          This report shows how the package processes retinal vascular data: it pairs
+          images with vessel masks, runs a simple segmentation baseline, skeletonizes
+          the vessels, extracts interpretable vascular features, and demonstrates
+          careful validation on a larger public fundus dataset.
         </p>
         <div class="status-strip">
           <div class="status-pill">
@@ -1014,20 +1228,20 @@ def render_report(
           <div class="summary-grid">
             <div>
               <p class="eyebrow">Executive summary</p>
-              <h2>What this demo establishes now</h2>
+              <h2>What this demo is for</h2>
               <p>
-                The current working datasets are ROSE for OCTA computer vision and FIVES
-                for modeling discipline. Neither is an ADRD biomarker dataset, but together
-                they demonstrate the engineering discipline needed before private Roux/JAX
-                retinal, plasma, clinical, genomic, and mouse-model data are joined.
+                This is a working demonstration of retinal vessel processing, not a clinical
+                diagnostic. In plain terms, it traces vessels at the back of the eye, reduces
+                their shape to a small set of interpretable numbers, and shows how those
+                numbers can be evaluated with honest train/test splits and calibration checks.
               </p>
               <ul class="compact-list">
                 <li>Raw medical images stay local under <code>data/raw/</code>.</li>
-                <li>Derived vascular features are cached under <code>data/interim/</code>.</li>
-                <li>ROSE manual masks produce OCTA vessel-feature sanity checks.</li>
+                <li>ROSE exercises the OCTA image-processing scaffold.</li>
+                <li>FIVES exercises feature modeling and calibration discipline.</li>
                 <li>
-                  Validation uses held-out data and reports calibration, not only rank
-                  metrics.
+                  The package uses baseline models deliberately: simple, inspectable methods
+                  that establish a floor before any specialized model is justified.
                 </li>
                 <li>
                   True ADRD biomarker analyses remain blocked until project-specific
@@ -1037,9 +1251,9 @@ def render_report(
             </div>
             <div class="callout warning">
               <p>
-                This report demonstrates a reproducible computer-vision scaffold. It does
-                not claim Alzheimer's diagnosis, ADRD risk prediction, or plasma biomarker
-                association from FIVES.
+                The public datasets here are stand-ins for demonstrating the processing
+                workflow. The report does not claim Alzheimer's diagnosis, ADRD risk
+                prediction, or plasma biomarker association from FIVES or ROSE.
               </p>
             </div>
           </div>
@@ -1047,15 +1261,45 @@ def render_report(
 
         <section class="panel">
           <div class="section-heading">
-            <p class="eyebrow">ROSE OCTA computer vision</p>
-            <h2>Manual-mask vascular feature scaffold</h2>
+            <p class="eyebrow">Dataset roles</p>
+            <h2>What each public dataset is used for</h2>
             <p>
-              ROSE supplies OCTA vessel segmentation data. ROSE-1 is documented as an
-              AD/control OCTA subset, but this demo uses it only for image-processing
-              and feature-sanity checks, not predictive or calibration claims.
+              The two public datasets have different jobs in this demo. ROSE is used to
+              exercise OCTA vessel-mask ingestion and feature extraction. FIVES is used
+              for the real-image walkthrough and the quantitative modeling example because
+              it has a larger public train/test split with disease-vs-normal labels.
             </p>
           </div>
-          {rose_figures}
+          <div class="method-grid">
+            {_dataset_reference_cards()}
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="section-heading">
+            <p class="eyebrow">Processing example</p>
+            <h2>From real fundus image to vessel mask to skeleton</h2>
+            <p>
+              The figure below uses a real local FIVES image and its manual vessel mask to
+              show the processing stages. ROSE-derived visual panels remain local-only by
+              default because the ROSE archive has more restrictive redistribution terms.
+            </p>
+          </div>
+          {processing_example_figure}
+        </section>
+
+        <section class="panel">
+          <div class="section-heading">
+            <p class="eyebrow">Technical overview</p>
+            <h2>What the package does under the hood</h2>
+            <p>
+              The package is intentionally compact: it uses transparent image-processing
+              and statistical baselines so the evidence trail is easy to inspect.
+            </p>
+          </div>
+          <div class="method-grid">
+            {_processing_method_blocks()}
+          </div>
         </section>
 
         <section class="panel">
@@ -1094,117 +1338,7 @@ def render_report(
           </div>
         </section>
 
-        <section class="panel">
-          <div class="section-heading">
-            <p class="eyebrow">Cross-species roadmap</p>
-            <h2>One feature table for human and mouse retinal vascular biology</h2>
-            <p>
-              This is the translational bridge: the same mask, skeleton, and feature
-              definitions can be reused for human OCTA/fundus images and mouse retinal
-              images before joining plasma, genomic, clinical, and mouse-model context.
-            </p>
-          </div>
-          {cross_species_figure}
-        </section>
-
         {render_data_audit_component(code_href_prefix=code_href_prefix)}
-
-        <section class="panel">
-          <div class="section-heading">
-            <p class="eyebrow">Feature cache contents</p>
-            <h2>What has been materialized locally</h2>
-            <p>
-              The report reads derived artifacts only. This table is generated from the
-              cached feature table when it is present.
-            </p>
-          </div>
-          <div class="method-grid">
-            <div class="method-block">
-              <h3>Label counts</h3>
-              <table>
-                <thead><tr><th>Label</th><th>Rows</th></tr></thead>
-                <tbody>
-                  {_table_rows(cache_summary.get("label_counts", {}))}
-                </tbody>
-              </table>
-            </div>
-            <div class="method-block">
-              <h3>Split counts</h3>
-              <table>
-                <thead><tr><th>Split</th><th>Rows</th></tr></thead>
-                <tbody>
-                  {_table_rows(cache_summary.get("split_counts", {}))}
-                </tbody>
-              </table>
-            </div>
-            <div class="method-block">
-              <h3>Current assets</h3>
-              <ul class="asset-list">
-                {_render_asset_status(project_root)}
-              </ul>
-            </div>
-          </div>
-        </section>
-
-        <section class="panel">
-          <div class="section-heading">
-            <p class="eyebrow">Dataset caveats</p>
-            <h2>What remains outside the current evidence base</h2>
-          </div>
-          <div class="method-grid">
-            <div class="note-block">
-              <h3>ROSE OCTA</h3>
-              <p>{escape(ROSE_MANUAL_MASK_CAVEAT)}</p>
-              <p>{escape(ROSE_NO_PREDICTION_CAVEAT)}</p>
-              <p>{escape(FEATURE_SCALING_CAVEAT)}</p>
-            </div>
-            <div class="note-block">
-              <h3>Roux/JAX human data</h3>
-              <p>
-                The production analysis should replace public-data loaders with
-                project-specific joins to retinal imaging, plasma p-tau217, amyloid
-                ratios, GFAP, NfL, genomics, and clinical covariates.
-              </p>
-            </div>
-            <div class="note-block">
-              <h3>Howell/Reagan mouse data</h3>
-              <p>
-                The same vascular feature definitions can be applied to mouse retinal
-                images, creating a shared phenotype table for cross-species comparison.
-              </p>
-            </div>
-          </div>
-        </section>
-
-        <section class="panel">
-          <div class="section-heading">
-            <p class="eyebrow">Next implementation targets</p>
-            <h2>What should come next</h2>
-          </div>
-          <div class="roadmap-grid">
-            <div class="roadmap-item">
-              <h3>Join cohort labels</h3>
-              <p>
-                Replace public-data stand-ins with project OCTA, plasma biomarker,
-                clinical, genomic, and mouse-model joins once those data are accessible.
-              </p>
-            </div>
-            <div class="roadmap-item">
-              <h3>Add cohort joins</h3>
-              <p>
-                Create typed loaders for biomarker, clinical, genomic, and imaging
-                metadata with explicit missingness and site or batch checks.
-              </p>
-            </div>
-            <div class="roadmap-item">
-              <h3>Broaden validation</h3>
-              <p>
-                Add calibration diagnostics, biologically informed ablations, and
-                sensitivity analyses before making any ADRD-facing claim.
-              </p>
-            </div>
-          </div>
-        </section>
       </main>
 
       <footer class="footer">
@@ -1238,16 +1372,21 @@ def render_data_audit_page(code_href_prefix: str | None = "../") -> str:
 def _copy_site_assets(project_root: Path, site_dir: Path) -> None:
     assets_dir = site_dir / "assets"
     assets_dir.mkdir(parents=True, exist_ok=True)
-    for stale_name in ("rose_pipeline_panel.png", "rose_feature_distributions.png"):
+    for stale_name in (
+        "rose_pipeline_panel.png",
+        "rose_feature_distributions.png",
+        "cross_species_roadmap.png",
+        "processing_example_panel.png",
+    ):
         stale_path = assets_dir / stale_name
         if stale_path.exists():
             stale_path.unlink()
     asset_map = {
+        project_root / "figures" / "processing_example_panel.png": (
+            assets_dir / "processing_example_panel.png"
+        ),
         project_root / "figures" / "fives_calibration_demo.png": (
             assets_dir / "fives_calibration_demo.png"
-        ),
-        project_root / "figures" / "cross_species_roadmap.png": (
-            assets_dir / "cross_species_roadmap.png"
         ),
     }
     for source, destination in asset_map.items():
@@ -1255,9 +1394,48 @@ def _copy_site_assets(project_root: Path, site_dir: Path) -> None:
             shutil.copy2(source, destination)
 
 
+def _generate_fives_processing_example(project_root: Path) -> None:
+    out_path = project_root / "figures" / "processing_example_panel.png"
+    try:
+        manifest = load_fives_manifest(project_root / "data" / "raw" / "fives")
+    except (DataNotFoundError, ValueError):
+        if out_path.exists():
+            out_path.unlink()
+        return
+    if manifest.empty:
+        if out_path.exists():
+            out_path.unlink()
+        return
+
+    candidates = manifest.copy()
+    if "official_split" in candidates.columns:
+        test_rows = candidates.loc[candidates["official_split"] == "test"]
+        if not test_rows.empty:
+            candidates = test_rows
+    if "label" in candidates.columns:
+        normal_rows = candidates.loc[candidates["label"].astype("string").str.lower() == "normal"]
+        if not normal_rows.empty:
+            candidates = normal_rows
+
+    row = candidates.iloc[0]
+    image = skio.imread(row["image_path"])
+    mask = skio.imread(row["mask_path"])
+    plot_processing_example_panel(
+        image,
+        mask,
+        out_path,
+        title="FIVES real fundus image processing example",
+        black_ridges=True,
+    )
+
+
 def build_report(root: Path | str = ".") -> ReportOutputs:
     """Write local report files and the GitHub Pages-ready docs site."""
     project_root = Path(root)
+    figures_dir = project_root / "figures"
+    figures_dir.mkdir(parents=True, exist_ok=True)
+    _generate_fives_processing_example(project_root)
+
     reports_dir = project_root / "reports"
     reports_dir.mkdir(parents=True, exist_ok=True)
     site_dir = project_root / "docs"

@@ -58,6 +58,7 @@ pixi install
 
 ```bash
 pixi run test
+pixi run tutorial
 pixi run rose-demo
 pixi run fives-demo
 pixi run report
@@ -75,14 +76,14 @@ image examples is permitted by the dataset terms.
 ```text
 figures/rose_pipeline_panel.png
 figures/rose_feature_distributions.png
+figures/processing_example_panel.png
 figures/fives_calibration_demo.png
-figures/cross_species_roadmap.png
 reports/retivasc_pi_demo.html
 reports/data_audit_flow.html
 docs/index.html
 docs/data_audit_flow.html
+docs/assets/processing_example_panel.png
 docs/assets/fives_calibration_demo.png
-docs/assets/cross_species_roadmap.png
 ```
 
 ## Publish With GitHub Pages

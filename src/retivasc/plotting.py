@@ -8,10 +8,13 @@ from textwrap import fill
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from skimage import transform
 from sklearn.calibration import calibration_curve
 from sklearn.metrics import brier_score_loss
 
-from retivasc.preprocess import ensure_grayscale, normalize_image
+from retivasc.preprocess import ensure_grayscale, normalize_image, resize_mask_to_max_dim
+from retivasc.segment import classical_vesselness_mask
+from retivasc.skeleton import skeletonize_mask
 
 
 def _prepare_out_path(out_path: str | Path) -> Path:
@@ -100,6 +103,63 @@ def plot_feature_distributions(
 
     fig.suptitle("Exploratory ROSE manual-mask vascular features", y=1.04)
     fig.tight_layout()
+    fig.savefig(out, dpi=200, bbox_inches="tight")
+    return fig
+
+
+def _resize_image_to_max_dim(image: np.ndarray, max_dim: int) -> np.ndarray:
+    arr = np.asarray(image)
+    if arr.ndim not in {2, 3}:
+        msg = f"Expected a 2D or 3D image, got shape {arr.shape}."
+        raise ValueError(msg)
+    rows, cols = arr.shape[:2]
+    current_max = max(rows, cols)
+    if current_max <= max_dim:
+        return arr
+    scale = max_dim / current_max
+    output_shape = (max(1, round(rows * scale)), max(1, round(cols * scale)), *arr.shape[2:])
+    return transform.resize(arr, output_shape, preserve_range=True, anti_aliasing=True)
+
+
+def _display_image(image: np.ndarray) -> np.ndarray:
+    arr = np.asarray(image)
+    if arr.ndim == 2:
+        return normalize_image(arr)
+    return np.clip(arr.astype(float) / 255.0, 0.0, 1.0)
+
+
+def plot_processing_example_panel(
+    image: np.ndarray,
+    manual_mask: np.ndarray,
+    out_path: str | Path,
+    *,
+    title: str = "FIVES real-image processing example",
+    black_ridges: bool = True,
+    max_dim: int = 512,
+):
+    """Save a real image/mask/baseline/skeleton processing example."""
+    out = _prepare_out_path(out_path)
+    image = _resize_image_to_max_dim(image, max_dim)
+    manual_mask = resize_mask_to_max_dim(ensure_grayscale(manual_mask) > 0, max_dim)
+    baseline_mask = classical_vesselness_mask(
+        image,
+        threshold="percentile:90",
+        black_ridges=black_ridges,
+    )
+    skeleton = skeletonize_mask(manual_mask)
+
+    fig, axes = plt.subplots(1, 4, figsize=(12, 3.4), constrained_layout=True)
+    panels = [
+        (_display_image(image), "FIVES fundus image", None),
+        (manual_mask, "Manual vessel mask", "gray"),
+        (baseline_mask, "Classical baseline mask", "gray"),
+        (skeleton, "Manual-mask skeleton", "magma"),
+    ]
+    for axis, (panel, panel_title, cmap) in zip(axes, panels, strict=True):
+        axis.imshow(panel, cmap=cmap) if cmap else axis.imshow(panel)
+        axis.set_title(panel_title)
+        axis.set_axis_off()
+    fig.suptitle(title, y=1.05)
     fig.savefig(out, dpi=200, bbox_inches="tight")
     return fig
 

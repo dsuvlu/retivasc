@@ -30,6 +30,7 @@ retivasc = { path = ".", editable = true }
 test = "pytest -q"
 lint = "ruff check src tests notebooks"
 format = "ruff format src tests notebooks"
+tutorial = "marimo run notebooks/00_data_flow_tutorial.py"
 rose-demo = "marimo run notebooks/01_rose_octa_feature_demo.py"
 fives-demo = "marimo run notebooks/02_fives_modeling_calibration_demo.py"
 report = "python -m retivasc.report_html"
