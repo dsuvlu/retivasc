@@ -12,7 +12,12 @@ from typing import Any
 
 import pandas as pd
 
-from retivasc.report_text import ROSE_MANUAL_MASK_CAVEAT, ROSE_NO_PREDICTION_CAVEAT
+from retivasc.report_text import (
+    FEATURE_SCALING_CAVEAT,
+    FIVES_SPLIT_CAVEAT,
+    ROSE_MANUAL_MASK_CAVEAT,
+    ROSE_NO_PREDICTION_CAVEAT,
+)
 
 DATA_AUDIT_STEPS: list[dict[str, Any]] = [
     {
@@ -63,7 +68,8 @@ DATA_AUDIT_STEPS: list[dict[str, Any]] = [
         "artifact": "one interpretable feature vector per image",
         "operation": (
             "The binary mask is skeletonized and summarized as density, skeleton length "
-            "density, branchpoint density, fractal dimension, and connected components."
+            "density, branchpoint density, fractal dimension, tortuosity, and connected "
+            "components."
         ),
         "code": [
             {"path": "src/retivasc/features.py", "symbol": "extract_vascular_features"},
@@ -93,14 +99,15 @@ DATA_AUDIT_STEPS: list[dict[str, Any]] = [
         "stage": "Leakage-aware split",
         "artifact": "600 train rows and 200 test rows",
         "operation": (
-            "The official FIVES split is used when present. Split groups are checked so "
-            "the model cannot train and test on the same grouped unit."
+            "The official FIVES image-level split is used when present. Split groups are "
+            "checked for image-disjoint evaluation, but patient-disjoint splitting is not "
+            "possible without public patient identifiers."
         ),
         "code": [
             {"path": "src/retivasc/splits.py", "symbol": "assert_group_split_safe"},
             {"label": "sklearn Pipeline"},
         ],
-        "checks": ["official split preferred", "group overlap rejected"],
+        "checks": ["official image-level split preferred", "patient identifiers unavailable"],
     },
     {
         "number": "07",
@@ -153,6 +160,17 @@ def _read_metrics(root: Path) -> dict[str, Any]:
 def _feature_cache_summary(root: Path) -> dict[str, Any]:
     cache_path = root / "data" / "interim" / "fives_features_max512.parquet"
     if not cache_path.exists():
+        summary_path = root / "reports" / "fives_feature_summary.json"
+        if summary_path.exists():
+            try:
+                summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                return {"path": cache_path, "available": False}
+            summary["path"] = cache_path
+            summary["summary_path"] = summary_path
+            summary["available"] = False
+            summary["source"] = "summary"
+            return summary
         return {"path": cache_path, "available": False}
 
     features = pd.read_parquet(cache_path)
@@ -183,6 +201,15 @@ def _fmt_float(value: Any) -> str:
         return "Pending"
     try:
         return f"{float(value):.3f}"
+    except (TypeError, ValueError):
+        return "Pending"
+
+
+def _fmt_percent(value: Any) -> str:
+    if value is None:
+        return "Pending"
+    try:
+        return f"{100 * float(value):.1f}%"
     except (TypeError, ValueError):
         return "Pending"
 
@@ -252,8 +279,7 @@ def _render_asset_status(root: Path) -> str:
         "FIVES calibration figure": "figures/fives_calibration_demo.png",
         "FIVES metrics JSON": "reports/fives_metrics.json",
         "FIVES feature cache": "data/interim/fives_features_max512.parquet",
-        "ROSE pipeline figure": "figures/rose_pipeline_panel.png",
-        "ROSE feature figure": "figures/rose_feature_distributions.png",
+        "Cross-species roadmap": "figures/cross_species_roadmap.png",
     }
     items = []
     for label, relative_path in assets.items():
@@ -489,6 +515,37 @@ def _styles() -> str:
 
     .callout p {
       margin: 0;
+    }
+
+    .public-placeholder {
+      display: grid;
+      gap: 14px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfd;
+    }
+
+    .pipeline-schematic {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      align-items: stretch;
+    }
+
+    .pipeline-schematic span {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 74px;
+      padding: 12px;
+      border: 1px solid #c9d8dc;
+      border-radius: 8px;
+      background: white;
+      color: var(--ink);
+      font-size: 0.88rem;
+      font-weight: 750;
+      text-align: center;
     }
 
     .compact-list {
@@ -773,7 +830,8 @@ def _styles() -> str:
       .roadmap-grid,
       .audit-timeline,
       .summary-grid,
-      .calibration-layout {
+      .calibration-layout,
+      .pipeline-schematic {
         grid-template-columns: 1fr;
       }
 
@@ -816,6 +874,7 @@ def render_report(
     metrics = _read_metrics(project_root)
     cache_summary = _feature_cache_summary(project_root)
     calibration_available = _path_exists(project_root, "figures/fives_calibration_demo.png")
+    cross_species_available = _path_exists(project_root, "figures/cross_species_roadmap.png")
 
     metric_cards = "\n".join(
         [
@@ -827,7 +886,10 @@ def render_report(
             _metric_card(
                 "AUPRC",
                 _fmt_float(metrics.get("AUPRC")),
-                _fmt_ci(metrics.get("AUPRC 95% CI")),
+                (
+                    f"{_fmt_ci(metrics.get('AUPRC 95% CI'))}; "
+                    f"test prevalence {_fmt_percent(metrics.get('test disease prevalence'))}"
+                ),
             ),
             _metric_card(
                 "Brier score",
@@ -846,6 +908,8 @@ def render_report(
         "Target": metrics.get("target", "Pending"),
         "Positive class": metrics.get("positive class", "Pending"),
         "Negative class": metrics.get("negative class", "Pending"),
+        "Split level": metrics.get("split level", "Pending"),
+        "Test disease prevalence": _fmt_percent(metrics.get("test disease prevalence")),
         "Feature max dim": metrics.get("feature max dimension", "Pending"),
         "Feature cache rows": cache_summary.get("rows", "Pending"),
     }
@@ -871,6 +935,49 @@ def render_report(
             "</div>"
         )
 
+    if cross_species_available:
+        cross_species_figure = (
+            "<figure>"
+            f'<img src="{escape(asset_prefix)}/cross_species_roadmap.png" '
+            'alt="Cross-species retinal vascular feature roadmap">'
+            "<figcaption>"
+            "The same feature definitions can be applied to human retinal imaging and "
+            "Howell/Reagan mouse retina studies, then aligned with biomarker, genomic, "
+            "and clinical context once project data are available."
+            "</figcaption>"
+            "</figure>"
+        )
+    else:
+        cross_species_figure = (
+            '<div class="callout warning">'
+            "<p>"
+            "The cross-species roadmap figure has not been generated. Run notebook 03 or "
+            "<code>plot_cross_species_roadmap</code> before publishing the report."
+            "</p>"
+            "</div>"
+        )
+
+    rose_figures = (
+        '<div class="public-placeholder">'
+        '<div class="pipeline-schematic" aria-label="ROSE OCTA processing schematic">'
+        "<span>Raw OCTA</span>"
+        "<span>Manual annotation</span>"
+        "<span>Classical baseline overlay</span>"
+        "<span>Manual-mask skeleton</span>"
+        "</div>"
+        "<p>"
+        "ROSE-derived visual panels are generated locally and intentionally omitted from "
+        "public reports unless the dataset terms permit redistribution of image examples."
+        "</p>"
+        "<p>"
+        "Grouped by available layer and subset metadata, not by disease status. Absolute "
+        "magnitudes differ across layers and ROSE subsets largely because of annotation "
+        "density and acquisition, so these distributions are a computer-vision sanity "
+        "check, not a biological comparison."
+        "</p>"
+        "</div>"
+    )
+
     generated = date.today().isoformat()
     body = f"""
     <div class="report-shell">
@@ -889,7 +996,7 @@ def render_report(
           </div>
           <div class="status-pill">
             <span>ROSE status</span>
-            <strong>pending local access</strong>
+            <strong>local-only visuals</strong>
           </div>
           <div class="status-pill">
             <span>ADRD claims</span>
@@ -909,21 +1016,22 @@ def render_report(
               <p class="eyebrow">Executive summary</p>
               <h2>What this demo establishes now</h2>
               <p>
-                The current working dataset is FIVES. It is not an ADRD dataset, but it
-                is large enough to demonstrate the engineering discipline needed before
-                private Roux/JAX retinal, plasma, clinical, genomic, and mouse-model data
-                are joined.
+                The current working datasets are ROSE for OCTA computer vision and FIVES
+                for modeling discipline. Neither is an ADRD biomarker dataset, but together
+                they demonstrate the engineering discipline needed before private Roux/JAX
+                retinal, plasma, clinical, genomic, and mouse-model data are joined.
               </p>
               <ul class="compact-list">
                 <li>Raw medical images stay local under <code>data/raw/</code>.</li>
                 <li>Derived vascular features are cached under <code>data/interim/</code>.</li>
+                <li>ROSE manual masks produce OCTA vessel-feature sanity checks.</li>
                 <li>
                   Validation uses held-out data and reports calibration, not only rank
                   metrics.
                 </li>
                 <li>
-                  ROSE and true ADRD biomarker analyses remain blocked until those data
-                  are available.
+                  True ADRD biomarker analyses remain blocked until project-specific
+                  clinical and biomarker data are available.
                 </li>
               </ul>
             </div>
@@ -939,11 +1047,24 @@ def render_report(
 
         <section class="panel">
           <div class="section-heading">
+            <p class="eyebrow">ROSE OCTA computer vision</p>
+            <h2>Manual-mask vascular feature scaffold</h2>
+            <p>
+              ROSE supplies OCTA vessel segmentation data. ROSE-1 is documented as an
+              AD/control OCTA subset, but this demo uses it only for image-processing
+              and feature-sanity checks, not predictive or calibration claims.
+            </p>
+          </div>
+          {rose_figures}
+        </section>
+
+        <section class="panel">
+          <div class="section-heading">
             <p class="eyebrow">FIVES modeling discipline</p>
             <h2>Current quantitative output</h2>
             <p>
               These metrics summarize a simple disease-vs-normal fundus-label model
-              trained and evaluated on the official FIVES split.
+              trained and evaluated on the official FIVES image-level split.
             </p>
           </div>
           <div class="metrics-grid">
@@ -966,8 +1087,24 @@ def render_report(
               <dl class="data-list">
                 {_definition_items(fives_details)}
               </dl>
+              <div class="callout warning" style="margin-top: 16px;">
+                <p>{escape(FIVES_SPLIT_CAVEAT)}</p>
+              </div>
             </div>
           </div>
+        </section>
+
+        <section class="panel">
+          <div class="section-heading">
+            <p class="eyebrow">Cross-species roadmap</p>
+            <h2>One feature table for human and mouse retinal vascular biology</h2>
+            <p>
+              This is the translational bridge: the same mask, skeleton, and feature
+              definitions can be reused for human OCTA/fundus images and mouse retinal
+              images before joining plasma, genomic, clinical, and mouse-model context.
+            </p>
+          </div>
+          {cross_species_figure}
         </section>
 
         {render_data_audit_component(code_href_prefix=code_href_prefix)}
@@ -1019,6 +1156,7 @@ def render_report(
               <h3>ROSE OCTA</h3>
               <p>{escape(ROSE_MANUAL_MASK_CAVEAT)}</p>
               <p>{escape(ROSE_NO_PREDICTION_CAVEAT)}</p>
+              <p>{escape(FEATURE_SCALING_CAVEAT)}</p>
             </div>
             <div class="note-block">
               <h3>Roux/JAX human data</h3>
@@ -1045,10 +1183,10 @@ def render_report(
           </div>
           <div class="roadmap-grid">
             <div class="roadmap-item">
-              <h3>Bring in ROSE or project OCTA</h3>
+              <h3>Join cohort labels</h3>
               <p>
-                Generate the OCTA-specific CV panel and manual-mask feature distributions
-                once the local dataset is accessible.
+                Replace public-data stand-ins with project OCTA, plasma biomarker,
+                clinical, genomic, and mouse-model joins once those data are accessible.
               </p>
             </div>
             <div class="roadmap-item">
@@ -1100,9 +1238,16 @@ def render_data_audit_page(code_href_prefix: str | None = "../") -> str:
 def _copy_site_assets(project_root: Path, site_dir: Path) -> None:
     assets_dir = site_dir / "assets"
     assets_dir.mkdir(parents=True, exist_ok=True)
+    for stale_name in ("rose_pipeline_panel.png", "rose_feature_distributions.png"):
+        stale_path = assets_dir / stale_name
+        if stale_path.exists():
+            stale_path.unlink()
     asset_map = {
         project_root / "figures" / "fives_calibration_demo.png": (
             assets_dir / "fives_calibration_demo.png"
+        ),
+        project_root / "figures" / "cross_species_roadmap.png": (
+            assets_dir / "cross_species_roadmap.png"
         ),
     }
     for source, destination in asset_map.items():

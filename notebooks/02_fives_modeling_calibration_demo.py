@@ -39,10 +39,12 @@ def _():
     from retivasc.io import DataNotFoundError, load_fives_manifest
     from retivasc.plotting import plot_calibration
     from retivasc.preprocess import ensure_grayscale, resize_mask_to_max_dim
+    from retivasc.report_text import FIVES_SPLIT_CAVEAT
     from retivasc.splits import assert_group_split_safe, grouped_train_test_split
 
     return (
         DataNotFoundError,
+        FIVES_SPLIT_CAVEAT,
         LogisticRegression,
         Path,
         StandardScaler,
@@ -105,7 +107,16 @@ def _(
     skio,
 ):
     feature_max_dim = 512
+    feature_version = "vascular_features_v2"
     feature_cache_path = Path("data/interim/fives_features_max512.parquet")
+    required_feature_columns = {
+        "vessel_density",
+        "skeleton_length_density",
+        "branchpoint_density",
+        "fractal_dimension_boxcount",
+        "mean_segment_tortuosity",
+        "connected_component_count",
+    }
 
     cache_ok = False
     if fives_manifest is not None and feature_cache_path.exists():
@@ -114,6 +125,9 @@ def _(
             len(cached_features) == len(fives_manifest)
             and "feature_max_dim" in cached_features.columns
             and set(cached_features["feature_max_dim"]) == {feature_max_dim}
+            and "feature_version" in cached_features.columns
+            and set(cached_features["feature_version"]) == {feature_version}
+            and required_feature_columns <= set(cached_features.columns)
         )
     else:
         cached_features = pd.DataFrame()
@@ -139,6 +153,7 @@ def _(
                             row, "split_group", getattr(row, "subject_id", row.image_id)
                         ),
                         "feature_max_dim": feature_max_dim,
+                        "feature_version": feature_version,
                     }
                 )
                 rows.append(features)
@@ -240,6 +255,7 @@ def _(fives_features, mo, np, pd):
             "skeleton_length_density",
             "branchpoint_density",
             "fractal_dimension_boxcount",
+            "mean_segment_tortuosity",
             "connected_component_count",
         ]
         modeling_df = modeling_df.replace([np.inf, -np.inf], np.nan).dropna(subset=numeric_cols)
@@ -362,6 +378,10 @@ def _(
             "positive class": "AMD/DR/glaucoma",
             "negative class": "normal",
             "feature max dimension": 512,
+            "split level": (
+                "image-level (FIVES official); patient linkage unavailable in public release"
+            ),
+            "test disease prevalence": float((y_true == 1).mean()),
         }
         metrics_path.parent.mkdir(parents=True, exist_ok=True)
         with metrics_path.open("w", encoding="utf-8") as file:
@@ -372,6 +392,7 @@ def _(
 @app.cell
 def _(
     calibration_path,
+    FIVES_SPLIT_CAVEAT,
     metrics_path,
     metrics_summary,
     mo,
@@ -402,6 +423,7 @@ def _(
             Saved metrics summary to `{metrics_path}`.
 
             Limitation: FIVES disease labels are not ADRD labels, and fundus imaging is not OCTA.
+            {FIVES_SPLIT_CAVEAT}
             This section demonstrates validation and calibration mechanics, not ADRD biology.
             """
     (

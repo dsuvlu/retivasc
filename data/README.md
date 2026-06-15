@@ -14,8 +14,11 @@ For the most reliable loading, place a `manifest.csv` in the dataset root.
 ROSE manifest columns:
 
 ```text
-dataset,subject_id,image_id,image_path,mask_path,modality,layer,label,split_group
+dataset,subject_id,image_id,image_path,mask_path,modality,layer,split_group
 ```
+
+`label` may be supplied when clinical labels are explicitly available in a local
+manifest. The loader does not infer ROSE AD/control status from filenames.
 
 FIVES manifest columns:
 
@@ -24,6 +27,22 @@ dataset,subject_id,image_id,image_path,mask_path,modality,label,split_group
 ```
 
 Relative `image_path` and `mask_path` values are resolved against the dataset root.
+
+The official ROSE archives can also be used without a manifest if unzipped under:
+
+```text
+data/raw/rose/
+  ROSE/
+    ROSE-1/
+    ROSE-2/
+  ROSE-O/
+```
+
+The loader uses ROSE-1/ROSE-2 image-mask pairs and records layer/split metadata.
+ROSE-O is kept available locally but is not needed for the default notebook.
+If official filenames collide across train/test splits, the loader raises and asks
+for a local manifest with explicit `subject_id` and `split_group` columns rather
+than hiding split membership inside inferred subject identifiers.
 
 The official FIVES archive can also be used without a manifest if it is unzipped as:
 

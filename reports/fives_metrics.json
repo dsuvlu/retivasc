@@ -1,19 +1,21 @@
 {
-  "AUROC": 0.8264,
+  "AUROC": 0.8254666666666667,
   "AUROC 95% CI": [
-    0.7718422013526406,
-    0.8866802595040676
+    0.7714985151279328,
+    0.8848759386825922
   ],
-  "AUPRC": 0.9349743929912929,
+  "AUPRC": 0.9345406152353362,
   "AUPRC 95% CI": [
-    0.9009434482811367,
-    0.9657968521985697
+    0.9007464190230623,
+    0.9662818183149441
   ],
-  "Brier score": 0.15039379815974332,
+  "Brier score": 0.15068038542349857,
   "train rows": 600,
   "test rows": 200,
   "target": "disease_vs_normal",
   "positive class": "AMD/DR/glaucoma",
   "negative class": "normal",
-  "feature max dimension": 512
+  "feature max dimension": 512,
+  "split level": "image-level (FIVES official); patient linkage unavailable in public release",
+  "test disease prevalence": 0.75
 }

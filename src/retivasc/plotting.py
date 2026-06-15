@@ -48,11 +48,11 @@ def plot_rose_pipeline_panel(
     axes[0].imshow(normalize_image(ensure_grayscale(image)), cmap="gray")
     axes[0].set_title("Raw OCTA")
     axes[1].imshow(np.asarray(manual_mask, dtype=bool), cmap="gray")
-    axes[1].set_title("Manual mask")
+    axes[1].set_title("Manual annotation")
     axes[2].imshow(_mask_overlay(image, predicted_mask, (1.0, 0.2, 0.1)))
-    axes[2].set_title("Classical overlay")
+    axes[2].set_title("Classical baseline overlay")
     axes[3].imshow(np.asarray(skeleton, dtype=bool), cmap="magma")
-    axes[3].set_title("Skeleton")
+    axes[3].set_title("Manual-mask skeleton")
 
     for axis in axes:
         axis.set_axis_off()
@@ -186,28 +186,32 @@ def plot_calibration(
 def plot_cross_species_roadmap(out_path: str | Path):
     """Save a species-agnostic retinal vascular feature roadmap schematic."""
     out = _prepare_out_path(out_path)
-    fig, axis = plt.subplots(figsize=(10.5, 5.6), constrained_layout=True)
+    fig, axis = plt.subplots(figsize=(11, 5.2), constrained_layout=True)
     axis.set_axis_off()
 
-    boxes = {
-        "human": (0.05, 0.68, "Human retinal images\nOCTA / fundus"),
-        "mouse": (0.05, 0.28, "Mouse retinal images\nMthfr677C>T studies"),
-        "mask": (0.36, 0.48, "Vessel mask + skeleton\nsame pipeline"),
-        "features": (
-            0.63,
-            0.48,
-            "Shared feature vector\ndensity, branching,\nfractal dimension,\ntortuosity proxy",
+    boxes = [
+        ("human", 0.05, 0.68, 0.25, 0.16, "Human retina\nOCTA / fundus"),
+        ("mouse", 0.05, 0.34, 0.25, 0.16, "Mouse retina\nMthfr677C>T"),
+        ("pipeline", 0.38, 0.51, 0.26, 0.18, "Vessel mask + skeleton\nsame pipeline"),
+        (
+            "features",
+            0.33,
+            0.17,
+            0.40,
+            0.18,
+            "Shared feature vector\ndensity, branching,\nfractal dimension, tortuosity",
         ),
-        "hypotheses": (
-            0.82,
-            0.48,
-            "Compare signatures\nalign with plasma,\nproteomic, genomic,\nand clinical context",
+        (
+            "context",
+            0.78,
+            0.16,
+            0.18,
+            0.31,
+            "Align with\np-tau217, Abeta ratio,\nGFAP, NfL, genomic,\nand clinical context",
         ),
-    }
+    ]
 
-    for key, (x, y, text) in boxes.items():
-        width = 0.22 if key in {"human", "mouse", "features"} else 0.18
-        height = 0.18 if key != "features" else 0.28
+    for _key, x, y, width, height, text in boxes:
         axis.add_patch(
             plt.Rectangle(
                 (x, y),
@@ -221,10 +225,10 @@ def plot_cross_species_roadmap(out_path: str | Path):
         axis.text(x + width / 2, y + height / 2, text, ha="center", va="center", fontsize=10)
 
     arrows = [
-        ((0.27, 0.77), (0.36, 0.57)),
-        ((0.27, 0.37), (0.36, 0.57)),
-        ((0.54, 0.57), (0.63, 0.62)),
-        ((0.85, 0.62), (0.82, 0.62)),
+        ((0.30, 0.76), (0.38, 0.61)),
+        ((0.30, 0.42), (0.38, 0.56)),
+        ((0.51, 0.51), (0.51, 0.35)),
+        ((0.73, 0.26), (0.78, 0.30)),
     ]
     for start, end in arrows:
         axis.annotate(
@@ -240,8 +244,8 @@ def plot_cross_species_roadmap(out_path: str | Path):
         "images and mouse retinal images, enabling cross-species comparison once Roux/JAX "
         "data are available."
     )
-    axis.text(0.05, 0.08, caption, ha="left", va="top", fontsize=9, wrap=True)
-    axis.set_xlim(0, 1.05)
+    axis.text(0.05, 0.06, caption, ha="left", va="top", fontsize=9, wrap=True)
+    axis.set_xlim(0, 1)
     axis.set_ylim(0, 1)
     fig.savefig(out, dpi=200, bbox_inches="tight")
     return fig

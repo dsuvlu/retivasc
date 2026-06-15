@@ -3,8 +3,8 @@
 `retivasc` is a proof-of-capability retinal vascular analysis prototype designed for
 early ADRD biomarker research. It demonstrates OCTA/fundus image ingestion,
 vessel-mask processing, skeletonization, vascular feature extraction, leakage-aware
-validation, and report generation. The initial demo uses ROSE for AD-relevant OCTA
-vascular features and FIVES for a larger-scale modeling/calibration example. It does
+validation, and report generation. The initial demo uses ROSE for OCTA vessel-mask
+computer vision and FIVES for a larger-scale modeling/calibration example. It does
 not claim clinical ADRD prediction from public data; instead, it demonstrates the
 reproducible computer-vision scaffold needed to connect retinal vascular phenotypes
 with plasma biomarkers, genomic context, and mouse-model biology.
@@ -66,6 +66,10 @@ pixi run report
 `pixi run report` writes both local review files under `reports/` and a GitHub
 Pages-ready static site under `docs/`.
 
+ROSE-derived visual panels are generated locally and are not committed or published
+by default. Public reports use a schematic or placeholder unless redistribution of
+image examples is permitted by the dataset terms.
+
 ## Expected Outputs
 
 ```text
@@ -78,6 +82,7 @@ reports/data_audit_flow.html
 docs/index.html
 docs/data_audit_flow.html
 docs/assets/fives_calibration_demo.png
+docs/assets/cross_species_roadmap.png
 ```
 
 ## Publish With GitHub Pages
@@ -92,10 +97,17 @@ from GitHub:
 
 ## Limitations
 
-ROSE is used only for exploratory OCTA vascular features. ROSE should not be used
-for an AD predictive model or calibration claim. FIVES is not ADRD; it is used only
-to demonstrate modeling and calibration discipline on a larger fundus dataset when
-valid labels are available. No synthetic plasma biomarker results are generated.
+ROSE-1 is documented as an AD/control OCTA subset in the published dataset, but
+this demo deliberately does not use ROSE for predictive modeling, AUROC, or
+calibration. ROSE-1 is small and lacks the plasma, amyloid/tau, genomic, and
+longitudinal context needed for any ADRD biomarker claim, so all ROSE analyses
+here are exploratory computer-vision sanity checks. Labels are used only if
+explicitly supplied in a local manifest; none are inferred from filenames. FIVES
+is not ADRD; it is used only to demonstrate modeling and calibration discipline on
+a larger fundus dataset when valid labels are available. Cross-cohort,
+cross-device, and cross-species use will require pixel-size or field-of-view
+normalization before interpreting absolute feature magnitudes. No synthetic plasma
+biomarker results are generated.
 
 ## References
 

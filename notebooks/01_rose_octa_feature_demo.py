@@ -16,9 +16,9 @@ def _(mo):
     mo.md("""
     # ROSE OCTA Feature Demo
 
-    ROSE is used here as a small OCTA vessel-segmentation dataset with an
-    AD/control subset. This notebook demonstrates the retinal vascular
-    computer-vision scaffold; it does not build or claim an ADRD diagnostic model.
+    ROSE is used here as an OCTA vessel-segmentation dataset. ROSE-1 is documented
+    as an AD/control OCTA subset, but this notebook uses ROSE only for computer-vision
+    sanity checks; it does not build or claim an ADRD diagnostic model.
     """)
     return
 
@@ -94,15 +94,23 @@ def _(mo, rose_manifest):
         audit_message = "## Manifest Audit\n\nWaiting for local ROSE data."
     else:
         subject_count = rose_manifest["subject_id"].nunique()
+        dataset_counts = rose_manifest["dataset"].value_counts(dropna=False).to_dict()
         layer_counts = rose_manifest["layer"].value_counts(dropna=False).to_dict()
         label_counts = rose_manifest["label"].value_counts(dropna=False).to_dict()
+        split_counts = (
+            rose_manifest["official_split"].value_counts(dropna=False).to_dict()
+            if "official_split" in rose_manifest.columns
+            else {}
+        )
         audit_message = f"""
             ## Manifest Audit
 
             - Rows: `{len(rose_manifest)}`
             - Subjects: `{subject_count}`
+            - Datasets: `{dataset_counts}`
             - Layers: `{layer_counts}`
             - Labels: `{label_counts}`
+            - Official splits: `{split_counts}`
             """
     mo.md(audit_message)
     return
@@ -116,7 +124,7 @@ def _(assert_group_split_safe, grouped_train_test_split, mo, rose_manifest):
         rose_train, rose_test = grouped_train_test_split(
             rose_manifest,
             group_col="subject_id",
-            label_col="label",
+            label_col="label" if rose_manifest["label"].notna().any() else None,
             test_size=0.25,
             random_state=0,
         )
@@ -132,8 +140,10 @@ def _(assert_group_split_safe, grouped_train_test_split, mo, rose_manifest):
         f"""
         ## Leakage Note
 
-        Multiple ROSE angiograms/layers can come from the same subject, so any evaluation
-        split must be by `subject_id`.
+        Multiple ROSE angiograms/layers can come from the same subject, so any
+        evaluation split must be by `subject_id`. Labels are used only if explicitly
+        supplied in a local manifest; none are inferred from filenames. This check
+        demonstrates split hygiene without disease stratification when labels are absent.
 
         `{split_message}`
         """
@@ -153,7 +163,8 @@ def _(
 ):
     pipeline_path = Path("figures/rose_pipeline_panel.png")
     if rose_manifest is not None:
-        first = rose_manifest.iloc[0]
+        svc_rows = rose_manifest.loc[rose_manifest["layer"].astype("string") == "SVC"]
+        first = svc_rows.iloc[0] if not svc_rows.empty else rose_manifest.iloc[0]
         image = skio.imread(first["image_path"])
         manual_mask = ensure_grayscale(skio.imread(first["mask_path"])) > 0
         predicted_mask = classical_vesselness_mask(image)
@@ -175,7 +186,7 @@ def _(mo, pipeline_path, rose_manifest):
         message = f"`{pipeline_path}` not generated because ROSE data are unavailable."
     else:
         message = (
-            "Saved raw OCTA, manual mask, classical segmentation overlay, and skeleton "
+            "Saved raw OCTA, manual annotation, classical baseline overlay, and skeleton "
             f"panel to `{pipeline_path}`."
         )
     (
@@ -226,6 +237,7 @@ def _(
                     "image_id": row.image_id,
                     "layer": row.layer,
                     "label": row.label,
+                    "feature_group": row.label if pd.notna(row.label) else row.layer,
                 }
             )
             feature_rows.append(features)
@@ -238,10 +250,16 @@ def _(
 @app.cell
 def _(feature_path, plot_feature_distributions, rose_features):
     if not rose_features.empty:
+        group_col = "label" if rose_features["label"].notna().any() else "feature_group"
         _ = plot_feature_distributions(
             rose_features,
-            ["vessel_density", "branchpoint_density", "fractal_dimension_boxcount"],
-            "label",
+            [
+                "vessel_density",
+                "branchpoint_density",
+                "fractal_dimension_boxcount",
+                "mean_segment_tortuosity",
+            ],
+            group_col,
             feature_path,
         )
     return
@@ -260,10 +278,12 @@ def _(feature_path, mo, rose_features):
             ## Exploratory Manual-Mask Features
 
             Extracted `{len(rose_features)}` manual-mask feature rows and saved exploratory
-            AD/control feature distributions to `{feature_path}`.
+            vascular feature distributions to `{feature_path}`.
 
-            These distributions are a biological teaser only; ROSE-1 is too small for
-            predictive AD modeling or calibration claims.
+            Grouped by available layer and subset metadata, not by disease status.
+            Absolute magnitudes differ across layers and ROSE subsets largely because of
+            annotation density and acquisition, so these distributions are a computer-vision
+            sanity check, not a biological comparison.
             """
     (
         mo.vstack(

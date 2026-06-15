@@ -24,9 +24,29 @@ def test_iou_identical_mask_is_one():
     assert iou_score(mask, mask) == 1.0
 
 
+def test_iou_empty_masks_are_one():
+    empty = np.zeros((8, 8), dtype=bool)
+
+    assert iou_score(empty, empty) == 1.0
+
+
 def test_sensitivity_specificity_known_arrays():
     y_true = np.array([[1, 1, 0, 0]], dtype=bool)
     y_pred = np.array([[1, 0, 1, 0]], dtype=bool)
 
     assert sensitivity(y_true, y_pred) == 0.5
     assert specificity(y_true, y_pred) == 0.5
+
+
+def test_sensitivity_empty_positive_convention_is_one():
+    y_true = np.zeros((8, 8), dtype=bool)
+    y_pred = np.zeros((8, 8), dtype=bool)
+
+    assert sensitivity(y_true, y_pred) == 1.0
+
+
+def test_specificity_empty_negative_convention_is_one():
+    y_true = np.ones((8, 8), dtype=bool)
+    y_pred = np.ones((8, 8), dtype=bool)
+
+    assert specificity(y_true, y_pred) == 1.0

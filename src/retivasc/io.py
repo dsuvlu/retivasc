@@ -229,6 +229,109 @@ def _load_fives_official_manifest(root: Path) -> pd.DataFrame | None:
     return None
 
 
+def _infer_rose2_subject_id(path: Path) -> str | None:
+    stem = path.stem
+    match = re.match(r"([A-Za-z]*\d+(?:-\d+)?)", stem)
+    if match:
+        return match.group(1)
+    return _infer_subject_id(path)
+
+
+def _raise_on_cross_split_subjects(df: pd.DataFrame, *, dataset_name: str) -> None:
+    if "official_split" not in df.columns or df.empty:
+        return
+    split_counts = df.groupby("subject_id")["official_split"].nunique(dropna=True)
+    collisions = sorted(str(subject_id) for subject_id, count in split_counts.items() if count > 1)
+    if not collisions:
+        return
+    preview = ", ".join(collisions[:5])
+    msg = (
+        f"{dataset_name} subject_id appears under multiple official splits: {preview}. "
+        "Supply a manifest.csv with explicit subject_id and split_group columns before "
+        "using these data for split-sensitive analysis."
+    )
+    raise ValueError(msg)
+
+
+def _load_rose_official_manifest(root: Path) -> pd.DataFrame | None:
+    """Load the official ROSE/ROSE-O segmentation layouts if present."""
+    rows = []
+
+    for rose1_root in sorted(root.rglob("ROSE-1")):
+        for layer_dir in sorted(child for child in rose1_root.iterdir() if child.is_dir()):
+            layer = _infer_layer(layer_dir)
+            if layer is None:
+                continue
+            for split in ("train", "test"):
+                split_dir = _find_child_dir(layer_dir, {split})
+                if split_dir is None:
+                    continue
+                image_dir = _find_child_dir(split_dir, {"img", "image", "images", "original"})
+                mask_dir = _find_child_dir(split_dir, {"gt", "mask", "masks", "vessel"})
+                if image_dir is None or mask_dir is None:
+                    continue
+
+                masks_by_stem = {path.stem: path for path in _image_files(mask_dir)}
+                for image_path in _image_files(image_dir):
+                    mask_path = masks_by_stem.get(image_path.stem)
+                    if mask_path is None:
+                        continue
+                    subject_id = f"ROSE-1_{image_path.stem}"
+                    rows.append(
+                        {
+                            "dataset": "ROSE-1",
+                            "subject_id": subject_id,
+                            "image_id": f"{subject_id}_{layer}",
+                            "image_path": str(image_path),
+                            "mask_path": str(mask_path),
+                            "modality": "OCTA",
+                            "layer": layer,
+                            "label": None,
+                            "official_split": split,
+                            "split_group": subject_id,
+                        }
+                    )
+
+    for rose2_root in sorted(root.rglob("ROSE-2")):
+        for split in ("train", "test"):
+            split_dir = _find_child_dir(rose2_root, {split})
+            if split_dir is None:
+                continue
+            image_dir = _find_child_dir(split_dir, {"original", "img", "image", "images"})
+            mask_dir = _find_child_dir(split_dir, {"gt", "mask", "masks", "vessel"})
+            if image_dir is None or mask_dir is None:
+                continue
+
+            masks_by_stem = {path.stem: path for path in _image_files(mask_dir)}
+            for image_path in _image_files(image_dir):
+                mask_path = masks_by_stem.get(image_path.stem)
+                if mask_path is None:
+                    continue
+                raw_subject_id = _infer_rose2_subject_id(image_path) or image_path.stem
+                subject_id = f"ROSE-2_{raw_subject_id}"
+                layer = _infer_layer(image_path) or "SVP"
+                rows.append(
+                    {
+                        "dataset": "ROSE-2",
+                        "subject_id": subject_id,
+                        "image_id": f"ROSE-2_{split}_{image_path.stem}",
+                        "image_path": str(image_path),
+                        "mask_path": str(mask_path),
+                        "modality": "OCTA",
+                        "layer": layer,
+                        "label": None,
+                        "official_split": split,
+                        "split_group": subject_id,
+                    }
+                )
+
+    if rows:
+        out = pd.DataFrame(rows)
+        _raise_on_cross_split_subjects(out, dataset_name="ROSE")
+        return out
+    return None
+
+
 def _infer_subject_id(path: Path) -> str | None:
     stem = path.stem
     match = re.search(r"(?:subject|subj|sub|patient|pt)[_\-\s]*(\d+)", stem, flags=re.I)
@@ -237,6 +340,15 @@ def _infer_subject_id(path: Path) -> str | None:
     first_number = re.search(r"\d+", stem)
     if first_number:
         return first_number.group(0)
+    return None
+
+
+def _infer_split_name(path: Path) -> str | None:
+    split_terms = {"train", "test", "val", "valid", "validation"}
+    for part in path.parts:
+        lowered = part.lower()
+        if lowered in split_terms:
+            return lowered
     return None
 
 
@@ -249,10 +361,16 @@ def load_rose_manifest(root: str | Path) -> pd.DataFrame:
     manifest = _read_manifest(root)
     if manifest is not None:
         out = _standardize_manifest(manifest, root, dataset="ROSE", modality="OCTA")
-        require_columns(out, ["image_path", "mask_path", "subject_id", "layer", "label"])
+        require_columns(out, ["image_path", "mask_path", "subject_id", "layer"])
+        if "label" not in out.columns:
+            out["label"] = None
         if "split_group" not in out.columns:
             out["split_group"] = out["subject_id"]
         return out
+
+    official = _load_rose_official_manifest(root)
+    if official is not None:
+        return official
 
     pairs = _pair_images_and_masks(root)
     if not pairs:
@@ -270,7 +388,8 @@ def load_rose_manifest(root: str | Path) -> pd.DataFrame:
         layer = _infer_layer(image_path)
         label = _infer_label(image_path)
         subject_id = _infer_subject_id(image_path)
-        if layer is None or label is None or subject_id is None:
+        split_name = _infer_split_name(image_path)
+        if layer is None or subject_id is None or split_name is not None:
             uncertain.append(image_path)
             continue
         rows.append(
@@ -290,9 +409,10 @@ def load_rose_manifest(root: str | Path) -> pd.DataFrame:
     if uncertain or not rows:
         preview = "\n".join(str(path) for path in uncertain[:5])
         msg = (
-            "Could not confidently infer ROSE subject_id, layer, and label from filenames. "
+            "Could not confidently infer ROSE subject_id and layer from filenames. "
             "Add data/raw/rose/manifest.csv with columns image_path, mask_path, subject_id, "
-            "layer, label, and split_group.\n"
+            "layer, optional label, and split_group. If files are arranged under split "
+            "directories, use a manifest so split_group cannot be hidden by path names.\n"
             f"Ambiguous examples:\n{preview}"
         )
         raise ValueError(msg)

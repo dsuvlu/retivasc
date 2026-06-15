@@ -1,0 +1,14 @@
+{
+  "rows": 800,
+  "label_counts": {
+    "AMD": 200,
+    "DR": 200,
+    "glaucoma": 200,
+    "normal": 200
+  },
+  "split_counts": {
+    "train": 600,
+    "test": 200
+  },
+  "feature_max_dim": 512
+}

@@ -179,6 +179,37 @@
       margin: 0;
     }
 
+    .public-placeholder {
+      display: grid;
+      gap: 14px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfd;
+    }
+
+    .pipeline-schematic {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      align-items: stretch;
+    }
+
+    .pipeline-schematic span {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 74px;
+      padding: 12px;
+      border: 1px solid #c9d8dc;
+      border-radius: 8px;
+      background: white;
+      color: var(--ink);
+      font-size: 0.88rem;
+      font-weight: 750;
+      text-align: center;
+    }
+
     .compact-list {
       margin: 0;
       padding-left: 20px;
@@ -461,7 +492,8 @@
       .roadmap-grid,
       .audit-timeline,
       .summary-grid,
-      .calibration-layout {
+      .calibration-layout,
+      .pipeline-schematic {
         grid-template-columns: 1fr;
       }
 
@@ -493,7 +525,7 @@
           </div>
           <div class="status-pill">
             <span>ROSE status</span>
-            <strong>pending local access</strong>
+            <strong>local-only visuals</strong>
           </div>
           <div class="status-pill">
             <span>ADRD claims</span>
@@ -501,7 +533,7 @@
           </div>
           <div class="status-pill">
             <span>Generated</span>
-            <strong>2026-06-14</strong>
+            <strong>2026-06-15</strong>
           </div>
         </div>
       </header>
@@ -513,21 +545,22 @@
               <p class="eyebrow">Executive summary</p>
               <h2>What this demo establishes now</h2>
               <p>
-                The current working dataset is FIVES. It is not an ADRD dataset, but it
-                is large enough to demonstrate the engineering discipline needed before
-                private Roux/JAX retinal, plasma, clinical, genomic, and mouse-model data
-                are joined.
+                The current working datasets are ROSE for OCTA computer vision and FIVES
+                for modeling discipline. Neither is an ADRD biomarker dataset, but together
+                they demonstrate the engineering discipline needed before private Roux/JAX
+                retinal, plasma, clinical, genomic, and mouse-model data are joined.
               </p>
               <ul class="compact-list">
                 <li>Raw medical images stay local under <code>data/raw/</code>.</li>
                 <li>Derived vascular features are cached under <code>data/interim/</code>.</li>
+                <li>ROSE manual masks produce OCTA vessel-feature sanity checks.</li>
                 <li>
                   Validation uses held-out data and reports calibration, not only rank
                   metrics.
                 </li>
                 <li>
-                  ROSE and true ADRD biomarker analyses remain blocked until those data
-                  are available.
+                  True ADRD biomarker analyses remain blocked until project-specific
+                  clinical and biomarker data are available.
                 </li>
               </ul>
             </div>
@@ -543,17 +576,30 @@
 
         <section class="panel">
           <div class="section-heading">
+            <p class="eyebrow">ROSE OCTA computer vision</p>
+            <h2>Manual-mask vascular feature scaffold</h2>
+            <p>
+              ROSE supplies OCTA vessel segmentation data. ROSE-1 is documented as an
+              AD/control OCTA subset, but this demo uses it only for image-processing
+              and feature-sanity checks, not predictive or calibration claims.
+            </p>
+          </div>
+          <div class="public-placeholder"><div class="pipeline-schematic" aria-label="ROSE OCTA processing schematic"><span>Raw OCTA</span><span>Manual annotation</span><span>Classical baseline overlay</span><span>Manual-mask skeleton</span></div><p>ROSE-derived visual panels are generated locally and intentionally omitted from public reports unless the dataset terms permit redistribution of image examples.</p><p>Grouped by available layer and subset metadata, not by disease status. Absolute magnitudes differ across layers and ROSE subsets largely because of annotation density and acquisition, so these distributions are a computer-vision sanity check, not a biological comparison.</p></div>
+        </section>
+
+        <section class="panel">
+          <div class="section-heading">
             <p class="eyebrow">FIVES modeling discipline</p>
             <h2>Current quantitative output</h2>
             <p>
               These metrics summarize a simple disease-vs-normal fundus-label model
-              trained and evaluated on the official FIVES split.
+              trained and evaluated on the official FIVES image-level split.
             </p>
           </div>
           <div class="metrics-grid">
-            <article class="metric-card"><span>AUROC</span><strong>0.826</strong><em>95% CI 0.772-0.887</em></article>
-<article class="metric-card"><span>AUPRC</span><strong>0.935</strong><em>95% CI 0.901-0.966</em></article>
-<article class="metric-card"><span>Brier score</span><strong>0.150</strong><em>lower is better</em></article>
+            <article class="metric-card"><span>AUROC</span><strong>0.825</strong><em>95% CI 0.771-0.885</em></article>
+<article class="metric-card"><span>AUPRC</span><strong>0.935</strong><em>95% CI 0.901-0.966; test prevalence 75.0%</em></article>
+<article class="metric-card"><span>Brier score</span><strong>0.151</strong><em>lower is better</em></article>
 <article class="metric-card"><span>Official split</span><strong>600 / 200</strong><em>train / test rows</em></article>
           </div>
         </section>
@@ -574,11 +620,29 @@
                 <div><dt>Target</dt><dd>disease_vs_normal</dd></div>
 <div><dt>Positive class</dt><dd>AMD/DR/glaucoma</dd></div>
 <div><dt>Negative class</dt><dd>normal</dd></div>
+<div><dt>Split level</dt><dd>image-level (FIVES official); patient linkage unavailable in public release</dd></div>
+<div><dt>Test disease prevalence</dt><dd>75.0%</dd></div>
 <div><dt>Feature max dim</dt><dd>512</dd></div>
 <div><dt>Feature cache rows</dt><dd>800</dd></div>
               </dl>
+              <div class="callout warning" style="margin-top: 16px;">
+                <p>FIVES is split here using its official image-level train/test partition. The leakage check confirms image-disjoint, not patient-disjoint, splits: the public FIVES release does not publish patient identifiers, so subject-level splitting is not possible and the official split may place two eyes of one person across train and test. With 800 images from 573 subjects this is a known limitation that can modestly inflate performance. The disease-vs-normal base rate in the FIVES test set is about 75 percent, so AUPRC is prevalence-driven and AUROC is the cleaner headline.</p>
+              </div>
             </div>
           </div>
+        </section>
+
+        <section class="panel">
+          <div class="section-heading">
+            <p class="eyebrow">Cross-species roadmap</p>
+            <h2>One feature table for human and mouse retinal vascular biology</h2>
+            <p>
+              This is the translational bridge: the same mask, skeleton, and feature
+              definitions can be reused for human OCTA/fundus images and mouse retinal
+              images before joining plasma, genomic, clinical, and mouse-model context.
+            </p>
+          </div>
+          <figure><img src="assets/cross_species_roadmap.png" alt="Cross-species retinal vascular feature roadmap"><figcaption>The same feature definitions can be applied to human retinal imaging and Howell/Reagan mouse retina studies, then aligned with biomarker, genomic, and clinical context once project data are available.</figcaption></figure>
         </section>
 
         <section class="panel audit-panel" id="data-audit-flow"><div class="section-heading"><p class="eyebrow">End-to-end data audit</p><h2>What happens to the data, step by step</h2><p>This is rendered as HTML so the report remains readable, searchable, and paired with the code paths that perform each operation.</p></div><div class="audit-timeline"><article class="audit-step"><div class="audit-index"><span>01</span></div><div class="audit-body"><p class="audit-artifact">data/raw/fives/</p><h3>Raw data landing zone</h3><p>The official FIVES archive is unpacked locally. Fundus images and manual vessel masks remain outside version control.</p><div class="code-ref-list"><span class="code-ref"><code>src/retivasc/io.py</code><span>load_fives_manifest</span></span></div><ul class="check-list"><li>raw images stay gitignored</li>
@@ -586,13 +650,13 @@
 <span class="code-ref"><code>notebooks/02_fives_modeling_calibration_demo.py</code><span>local data check</span></span></div><ul class="check-list"><li>image-mask pairing validated</li>
 <li>split metadata preserved</li></ul></div></article><article class="audit-step"><div class="audit-index"><span>03</span></div><div class="audit-body"><p class="audit-artifact">manual vessel mask arrays</p><h3>Mask preprocessing</h3><p>Mask PNGs are loaded, converted to grayscale, binarized, and downsampled to max dimension 512 for fast reproducible feature extraction.</p><div class="code-ref-list"><span class="code-ref"><code>src/retivasc/preprocess.py</code><span>ensure_grayscale</span></span>
 <span class="code-ref"><code>src/retivasc/preprocess.py</code><span>resize_mask_to_max_dim</span></span></div><ul class="check-list"><li>no synthetic masks created</li>
-<li>feature_max_dim recorded</li></ul></div></article><article class="audit-step"><div class="audit-index"><span>04</span></div><div class="audit-body"><p class="audit-artifact">one interpretable feature vector per image</p><h3>Vascular feature extraction</h3><p>The binary mask is skeletonized and summarized as density, skeleton length density, branchpoint density, fractal dimension, and connected components.</p><div class="code-ref-list"><span class="code-ref"><code>src/retivasc/features.py</code><span>extract_vascular_features</span></span>
+<li>feature_max_dim recorded</li></ul></div></article><article class="audit-step"><div class="audit-index"><span>04</span></div><div class="audit-body"><p class="audit-artifact">one interpretable feature vector per image</p><h3>Vascular feature extraction</h3><p>The binary mask is skeletonized and summarized as density, skeleton length density, branchpoint density, fractal dimension, tortuosity, and connected components.</p><div class="code-ref-list"><span class="code-ref"><code>src/retivasc/features.py</code><span>extract_vascular_features</span></span>
 <span class="code-ref"><code>src/retivasc/skeleton.py</code><span>skeletonize_mask</span></span></div><ul class="check-list"><li>species-agnostic feature definitions</li>
 <li>derived table only</li></ul></div></article><article class="audit-step"><div class="audit-index"><span>05</span></div><div class="audit-body"><p class="audit-artifact">data/interim/fives_features_max512.parquet</p><h3>Feature cache</h3><p>The derived feature table is cached so report regeneration does not re-read and reprocess every raw mask.</p><div class="code-ref-list"><span class="code-ref"><code>notebooks/02_fives_modeling_calibration_demo.py</code><span>cache check</span></span>
 <span class="code-ref"><code>pandas.to_parquet</code></span></div><ul class="check-list"><li>800 cached rows expected</li>
-<li>cache includes feature_max_dim</li></ul></div></article><article class="audit-step"><div class="audit-index"><span>06</span></div><div class="audit-body"><p class="audit-artifact">600 train rows and 200 test rows</p><h3>Leakage-aware split</h3><p>The official FIVES split is used when present. Split groups are checked so the model cannot train and test on the same grouped unit.</p><div class="code-ref-list"><span class="code-ref"><code>src/retivasc/splits.py</code><span>assert_group_split_safe</span></span>
-<span class="code-ref"><code>sklearn Pipeline</code></span></div><ul class="check-list"><li>official split preferred</li>
-<li>group overlap rejected</li></ul></div></article><article class="audit-step"><div class="audit-index"><span>07</span></div><div class="audit-body"><p class="audit-artifact">figures/fives_calibration_demo.png, reports/fives_metrics.json</p><h3>Modeling and calibration</h3><p>A simple logistic model demonstrates evaluation discipline on FIVES disease-vs-normal labels using AUROC, AUPRC, Brier score, and bootstrap CIs.</p><div class="code-ref-list"><span class="code-ref"><code>src/retivasc/plotting.py</code><span>plot_calibration</span></span>
+<li>cache includes feature_max_dim</li></ul></div></article><article class="audit-step"><div class="audit-index"><span>06</span></div><div class="audit-body"><p class="audit-artifact">600 train rows and 200 test rows</p><h3>Leakage-aware split</h3><p>The official FIVES image-level split is used when present. Split groups are checked for image-disjoint evaluation, but patient-disjoint splitting is not possible without public patient identifiers.</p><div class="code-ref-list"><span class="code-ref"><code>src/retivasc/splits.py</code><span>assert_group_split_safe</span></span>
+<span class="code-ref"><code>sklearn Pipeline</code></span></div><ul class="check-list"><li>official image-level split preferred</li>
+<li>patient identifiers unavailable</li></ul></div></article><article class="audit-step"><div class="audit-index"><span>07</span></div><div class="audit-body"><p class="audit-artifact">figures/fives_calibration_demo.png, reports/fives_metrics.json</p><h3>Modeling and calibration</h3><p>A simple logistic model demonstrates evaluation discipline on FIVES disease-vs-normal labels using AUROC, AUPRC, Brier score, and bootstrap CIs.</p><div class="code-ref-list"><span class="code-ref"><code>src/retivasc/plotting.py</code><span>plot_calibration</span></span>
 <span class="code-ref"><code>sklearn.metrics</code></span></div><ul class="check-list"><li>calibration reported</li>
 <li>not an ADRD prediction claim</li></ul></div></article><article class="audit-step"><div class="audit-index"><span>08</span></div><div class="audit-body"><p class="audit-artifact">reports/retivasc_pi_demo.html</p><h3>Static PI report</h3><p>The deliverable consumes derived figures, cached features, metric JSON, explicit caveats, and this HTML audit trail.</p><div class="code-ref-list"><span class="code-ref"><code>src/retivasc/report_html.py</code><span>build_report</span></span></div><ul class="check-list"><li>raw files not embedded</li>
 <li>audit rendered as HTML</li></ul></div></article></div></section>
@@ -635,8 +699,7 @@
                 <li class="asset-row"><span>FIVES calibration figure</span><code>figures/fives_calibration_demo.png</code><b class="available">available</b></li>
 <li class="asset-row"><span>FIVES metrics JSON</span><code>reports/fives_metrics.json</code><b class="available">available</b></li>
 <li class="asset-row"><span>FIVES feature cache</span><code>data/interim/fives_features_max512.parquet</code><b class="available">available</b></li>
-<li class="asset-row"><span>ROSE pipeline figure</span><code>figures/rose_pipeline_panel.png</code><b class="pending">pending</b></li>
-<li class="asset-row"><span>ROSE feature figure</span><code>figures/rose_feature_distributions.png</code><b class="pending">pending</b></li>
+<li class="asset-row"><span>Cross-species roadmap</span><code>figures/cross_species_roadmap.png</code><b class="available">available</b></li>
               </ul>
             </div>
           </div>
@@ -650,8 +713,9 @@
           <div class="method-grid">
             <div class="note-block">
               <h3>ROSE OCTA</h3>
-              <p>For the AD/control feature teaser, I use the manual masks rather than predicted masks so that the biological comparison is not confounded by segmentation error. The segmentation baseline is benchmarked separately as a computer-vision component.</p>
-              <p>ROSE is used here as a small exploratory OCTA vascular-feature dataset, not as a basis for AD prediction, AUROC claims, or calibration claims.</p>
+              <p>For ROSE feature extraction, I use the manual vessel masks rather than predicted masks so that feature sanity checks are not confounded by segmentation error. The classical segmentation baseline is shown separately as a computer-vision component.</p>
+              <p>ROSE-1 is documented as an AD/control OCTA subset in the published dataset, but this demo deliberately does not use ROSE for predictive modeling, AUROC, or calibration. ROSE-1 is small and lacks the plasma, amyloid/tau, genomic, and longitudinal context needed for any ADRD biomarker claim, so all ROSE analyses here are exploratory computer-vision sanity checks. Labels are used only if explicitly supplied in a local manifest; none are inferred from filenames.</p>
+              <p>Cross-cohort, cross-device, and cross-species use will require pixel-size or field-of-view normalization before interpreting absolute feature magnitudes.</p>
             </div>
             <div class="note-block">
               <h3>Roux/JAX human data</h3>
@@ -678,10 +742,10 @@
           </div>
           <div class="roadmap-grid">
             <div class="roadmap-item">
-              <h3>Bring in ROSE or project OCTA</h3>
+              <h3>Join cohort labels</h3>
               <p>
-                Generate the OCTA-specific CV panel and manual-mask feature distributions
-                once the local dataset is accessible.
+                Replace public-data stand-ins with project OCTA, plasma biomarker,
+                clinical, genomic, and mouse-model joins once those data are accessible.
               </p>
             </div>
             <div class="roadmap-item">

@@ -6,8 +6,15 @@ __pycache__/
 .mypy_cache/
 .ipynb_checkpoints/
 notebooks/__marimo__/
+.agents/
+.codex/
+*.zip
+retivasc_hardening_spec.md
+retivasc_development_handoff.md
 
 # Do not commit raw or derived medical-image data.
 data/raw/
 data/interim/
 data/processed/
+figures/rose_*.png
+docs/assets/rose_*.png

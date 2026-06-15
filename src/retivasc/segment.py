@@ -8,13 +8,19 @@ from skimage import filters, morphology
 from retivasc.preprocess import ensure_grayscale, normalize_image
 
 
-def classical_vesselness_mask(image: np.ndarray, *, threshold: str = "otsu") -> np.ndarray:
-    """Return a binary vessel mask using Frangi vesselness plus thresholding."""
+def classical_vesselness_mask(
+    image: np.ndarray, *, threshold: str = "otsu", black_ridges: bool = False
+) -> np.ndarray:
+    """Return a binary vessel mask using Frangi vesselness plus thresholding.
+
+    The default assumes bright vessels, which matches OCTA projections. Set
+    ``black_ridges=True`` for dark-vessel fundus-style inputs.
+    """
     gray = normalize_image(ensure_grayscale(image))
     if gray.size == 0:
         return np.zeros_like(gray, dtype=bool)
 
-    vesselness = filters.frangi(gray, black_ridges=False)
+    vesselness = filters.frangi(gray, black_ridges=black_ridges)
     vesselness = normalize_image(vesselness)
     if not vesselness.any():
         vesselness = gray
@@ -37,7 +43,8 @@ def cleanup_mask(mask: np.ndarray, *, min_size: int = 16) -> np.ndarray:
     mask_bool = np.asarray(mask, dtype=bool)
     if mask_bool.size == 0:
         return mask_bool
-    cleaned = morphology.remove_small_objects(mask_bool, min_size=min_size)
-    cleaned = morphology.binary_closing(cleaned, morphology.disk(1))
-    cleaned = morphology.remove_small_holes(cleaned, area_threshold=min_size)
+    max_size = max(0, min_size - 1)
+    cleaned = morphology.remove_small_objects(mask_bool, max_size=max_size)
+    cleaned = morphology.closing(cleaned, morphology.disk(1))
+    cleaned = morphology.remove_small_holes(cleaned, max_size=max_size)
     return cleaned.astype(bool)
