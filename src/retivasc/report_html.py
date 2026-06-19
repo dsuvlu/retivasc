@@ -13,9 +13,10 @@ from typing import Any
 import pandas as pd
 from skimage import io as skio
 
+from retivasc.feature_metadata import FEATURE_METADATA
 from retivasc.io import DataNotFoundError, load_fives_manifest
 from retivasc.plotting import plot_processing_example_panel
-from retivasc.report_text import FIVES_SPLIT_CAVEAT
+from retivasc.report_text import EARLY_VS_LATE_BIOMARKER_NOTE, FIVES_SPLIT_CAVEAT
 
 DATA_AUDIT_STEPS: list[dict[str, Any]] = [
     {
@@ -29,15 +30,19 @@ DATA_AUDIT_STEPS: list[dict[str, Any]] = [
         ),
         "detail": (
             "ROSE and FIVES loaders detect official folder layouts or read a local manifest. "
-            "They normalize image ids, mask paths, labels when supplied, layer metadata, and "
-            "split groups without downloading or committing medical images. Local data are "
-            "expected under data/raw/rose/ and data/raw/fives/."
+            "They normalize image ids, mask paths, ROSE-1 official disease/control labels, "
+            "layer metadata, and split groups without downloading or committing medical images. "
+            "Local data are expected under data/raw/rose/ and data/raw/fives/."
         ),
         "code": [
             {"path": "src/retivasc/io.py", "symbol": "load_rose_manifest"},
             {"path": "src/retivasc/io.py", "symbol": "load_fives_manifest"},
         ],
-        "checks": ["raw images stay local", "image-mask pairing checked", "no labels guessed"],
+        "checks": [
+            "raw images stay local",
+            "image-mask pairing checked",
+            "ROSE-1 labels from official ordering only",
+        ],
     },
     {
         "number": "02",
@@ -102,18 +107,19 @@ DATA_AUDIT_STEPS: list[dict[str, Any]] = [
         "stage": "Extract vascular features",
         "artifact": "vascular fingerprint per image",
         "plain": (
-            "Each mask is reduced to interpretable numbers: vessel density, centerline "
-            "length, branch density, fractal dimension, tortuosity, and component count."
+            "Each mask is reduced to interpretable numbers. Tortuosity burden and caliber "
+            "dispersion lead the paper-aligned set; density, branch, and component features "
+            "are retained as later-stage or context descriptors."
         ),
         "detail": (
-            "These feature definitions are intentionally species-agnostic so the same code "
-            "can later be applied to human and mouse retinal images."
+            "Feature metadata records whether each descriptor is early, late, context, or "
+            "interpretive, so dataset reports do not overstate density or context features."
         ),
         "code": [
             {"path": "src/retivasc/features.py", "symbol": "extract_vascular_features"},
-            {"path": "src/retivasc/features.py", "symbol": "segment_tortuosity"},
+            {"path": "src/retivasc/features.py", "symbol": "tortuosity_burden"},
         ],
-        "checks": ["interpretable features", "no synthetic biomarkers", "derived table only"],
+        "checks": ["timing metadata", "no synthetic biomarkers", "derived table only"],
     },
     {
         "number": "06",
@@ -402,9 +408,9 @@ def _processing_method_blocks() -> str:
         (
             "Manual-mask feature extraction",
             (
-                "Manual vessel masks are converted into a small vascular fingerprint: "
-                "density, skeleton length, branch density, fractal dimension, tortuosity, "
-                "and component count."
+                "Manual vessel masks are converted into a vascular fingerprint with "
+                "paper-aligned timing labels. Tortuosity burden leads the portable "
+                "feature set; density is retained as a later-stage descriptor."
             ),
             "features.py",
         ),
@@ -442,6 +448,29 @@ def _processing_method_blocks() -> str:
         ),
     ]
     return "\n".join(_method_block(title, body, code) for title, body, code in blocks)
+
+
+def _feature_timing_cards() -> str:
+    selected = [
+        "tortuous_segment_fraction",
+        "caliber_cv",
+        "candidate_crossing_density",
+        "vessel_density",
+        "major_branch_count",
+        "fractal_dimension_boxcount",
+        "dropout_heterogeneity",
+    ]
+    cards = []
+    for key in selected:
+        metadata = FEATURE_METADATA[key]
+        cards.append(
+            '<article class="method-block">'
+            f"<h3>{escape(key)}</h3>"
+            f"<p><strong>Timing:</strong> {escape(str(metadata['timing']))}</p>"
+            f"<p>{escape(str(metadata['note']))}</p>"
+            "</article>"
+        )
+    return "\n".join(cards)
 
 
 def _table_rows(values: dict[str, int]) -> str:
@@ -1299,6 +1328,12 @@ def render_report(
           </div>
           <div class="method-grid">
             {_processing_method_blocks()}
+          </div>
+          <div class="callout info" style="margin-top: 16px;">
+            <p>{escape(EARLY_VS_LATE_BIOMARKER_NOTE)}</p>
+          </div>
+          <div class="method-grid" style="margin-top: 16px;">
+            {_feature_timing_cards()}
           </div>
         </section>
 

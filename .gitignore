@@ -12,6 +12,17 @@ notebooks/__marimo__/
 retivasc_hardening_spec.md
 retivasc_development_handoff.md
 demo_explanation.md
+presentations/
+codex_*.txt
+notebooks/playground.py
+
+# Local development handoff/planning docs.
+docs/*.pdf
+docs/*_spec.md
+docs/*_handoff.md
+docs/*_handoff_plan.md
+docs/*_dev_plan.md
+docs/*_implementation_plan.md
 
 # Do not commit raw or derived medical-image data.
 data/raw/
@@ -20,3 +31,7 @@ data/processed/
 figures/rose_*.png
 figures/tutorial_*_data_flow.png
 docs/assets/rose_*.png
+reports/rose_mask_embedding*
+reports/rose_layer_aware_statistics*.html
+reports/rose_outlier_audit.html
+outputs/

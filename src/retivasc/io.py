@@ -32,6 +32,20 @@ FIVES_LABEL_CODES = {
     "G": "glaucoma",
     "N": "normal",
 }
+ROSE1_ALZHEIMERS_LABEL_RANGES = {
+    "train": {
+        "disease": range(1, 21),
+        "control": range(21, 31),
+    },
+    "test": {
+        "disease": range(1, 7),
+        "control": range(7, 10),
+    },
+}
+ROSE1_LABEL_SOURCE = (
+    "ROSE-1 official AD/control cohort ordering: train 1-20 disease, "
+    "train 21-30 control, test 1-6 disease, test 7-9 control"
+)
 
 
 class DataNotFoundError(FileNotFoundError):
@@ -237,6 +251,17 @@ def _infer_rose2_subject_id(path: Path) -> str | None:
     return _infer_subject_id(path)
 
 
+def _infer_rose1_label(split: str, image_stem: str) -> str | None:
+    try:
+        subject_number = int(image_stem)
+    except ValueError:
+        return None
+    for label, subject_range in ROSE1_ALZHEIMERS_LABEL_RANGES.get(split, {}).items():
+        if subject_number in subject_range:
+            return label
+    return None
+
+
 def _raise_on_cross_split_subjects(df: pd.DataFrame, *, dataset_name: str) -> None:
     if "official_split" not in df.columns or df.empty:
         return
@@ -253,7 +278,9 @@ def _raise_on_cross_split_subjects(df: pd.DataFrame, *, dataset_name: str) -> No
     raise ValueError(msg)
 
 
-def _load_rose_official_manifest(root: Path) -> pd.DataFrame | None:
+def _load_rose_official_manifest(
+    root: Path, *, require_split_safe: bool = True
+) -> pd.DataFrame | None:
     """Load the official ROSE/ROSE-O segmentation layouts if present."""
     rows = []
 
@@ -276,7 +303,9 @@ def _load_rose_official_manifest(root: Path) -> pd.DataFrame | None:
                     mask_path = masks_by_stem.get(image_path.stem)
                     if mask_path is None:
                         continue
-                    subject_id = f"ROSE-1_{image_path.stem}"
+                    subject_id = f"ROSE-1_{split}_{image_path.stem}"
+                    label = _infer_rose1_label(split, image_path.stem)
+                    diagnosis = "Alzheimer's disease" if label == "disease" else label
                     rows.append(
                         {
                             "dataset": "ROSE-1",
@@ -286,7 +315,9 @@ def _load_rose_official_manifest(root: Path) -> pd.DataFrame | None:
                             "mask_path": str(mask_path),
                             "modality": "OCTA",
                             "layer": layer,
-                            "label": None,
+                            "label": label,
+                            "diagnosis": diagnosis,
+                            "label_source": ROSE1_LABEL_SOURCE if label is not None else None,
                             "official_split": split,
                             "split_group": subject_id,
                         }
@@ -327,7 +358,8 @@ def _load_rose_official_manifest(root: Path) -> pd.DataFrame | None:
 
     if rows:
         out = pd.DataFrame(rows)
-        _raise_on_cross_split_subjects(out, dataset_name="ROSE")
+        if require_split_safe:
+            _raise_on_cross_split_subjects(out, dataset_name="ROSE")
         return out
     return None
 
@@ -352,8 +384,14 @@ def _infer_split_name(path: Path) -> str | None:
     return None
 
 
-def load_rose_manifest(root: str | Path) -> pd.DataFrame:
-    """Return one row per ROSE image/layer with paths and subject-level split groups."""
+def load_rose_manifest(root: str | Path, *, require_split_safe: bool = True) -> pd.DataFrame:
+    """Return one row per ROSE image/layer with paths and subject-level split groups.
+
+    By default, official ROSE layouts are rejected when a discovered subject id appears
+    under multiple official split folders. Demo notebooks can set
+    ``require_split_safe=False`` to load image/mask rows for non-split-sensitive
+    visualization and feature extraction.
+    """
     root = Path(root)
     if not root.exists():
         raise DataNotFoundError(_dataset_missing_message("ROSE", root))
@@ -368,7 +406,7 @@ def load_rose_manifest(root: str | Path) -> pd.DataFrame:
             out["split_group"] = out["subject_id"]
         return out
 
-    official = _load_rose_official_manifest(root)
+    official = _load_rose_official_manifest(root, require_split_safe=require_split_safe)
     if official is not None:
         return official
 

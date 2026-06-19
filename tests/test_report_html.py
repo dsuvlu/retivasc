@@ -5,6 +5,7 @@ import numpy as np
 from skimage import io as skio
 
 from retivasc.report_html import build_report, render_data_audit_component
+from retivasc.report_text import EARLY_VS_LATE_BIOMARKER_NOTE
 
 
 def _write_demo_metrics(root: Path) -> None:
@@ -118,6 +119,10 @@ def test_build_report_writes_local_report_and_pages_site(tmp_path):
     assert "Real FIVES fundus example" in site_html
     assert "image-disjoint, not patient-disjoint" in site_html
     assert "test prevalence 75.0%" in site_html
+    assert EARLY_VS_LATE_BIOMARKER_NOTE in site_html
+    assert "tortuous_segment_fraction" in site_html
+    assert "<strong>Timing:</strong> late" in site_html
+    assert "density, skeleton length, branch density" not in site_html
     assert "Pending" not in site_html
     assert 'href="../src/retivasc/io.py"' not in site_html
     assert "src/retivasc/io.py" in site_html

@@ -1,5 +1,4 @@
 import numpy as np
-import pytest
 from skimage import io as skio
 
 from retivasc.io import load_fives_manifest, load_rose_manifest
@@ -49,7 +48,8 @@ def test_load_rose_manifest_detects_official_rose1_layout(tmp_path):
     assert len(manifest) == 3
     assert set(manifest["dataset"]) == {"ROSE-1"}
     assert set(manifest["layer"]) == {"SVC", "DVC", "SVC+DVC"}
-    assert manifest["label"].isna().all()
+    assert set(manifest["label"]) == {"disease"}
+    assert set(manifest["diagnosis"]) == {"Alzheimer's disease"}
     assert manifest["subject_id"].nunique() == 1
     assert manifest["split_group"].nunique() == 1
     assert set(manifest["split_group"]) == set(manifest["subject_id"])
@@ -74,7 +74,7 @@ def test_load_rose_manifest_detects_official_rose2_layout(tmp_path):
     assert manifest.loc[0, "label"] is None
 
 
-def test_load_rose_manifest_rejects_official_cross_split_subject_collision(tmp_path):
+def test_load_rose_manifest_uses_split_qualified_rose1_subject_ids(tmp_path):
     root = tmp_path / "rose"
     image = np.zeros((8, 8), dtype=np.uint8)
     mask = np.zeros((8, 8), dtype=np.uint8)
@@ -84,5 +84,27 @@ def test_load_rose_manifest_rejects_official_cross_split_subject_collision(tmp_p
         _write_png(root / "ROSE" / "ROSE-1" / "SVC" / split / "img" / "01.tif", image)
         _write_png(root / "ROSE" / "ROSE-1" / "SVC" / split / "gt" / "01.tif", mask)
 
-    with pytest.raises(ValueError, match="multiple official splits"):
-        load_rose_manifest(root)
+    manifest = load_rose_manifest(root)
+
+    assert len(manifest) == 2
+    assert set(manifest["subject_id"]) == {"ROSE-1_train_01", "ROSE-1_test_01"}
+    assert set(manifest["label"]) == {"disease"}
+    assert manifest["subject_id"].is_unique
+
+
+def test_load_rose_manifest_assigns_rose1_control_labels(tmp_path):
+    root = tmp_path / "rose"
+    image = np.zeros((8, 8), dtype=np.uint8)
+    mask = np.zeros((8, 8), dtype=np.uint8)
+    mask[2:6, 3] = 255
+
+    for split, filename in {"train": "21.tif", "test": "07.tif"}.items():
+        _write_png(root / "ROSE" / "ROSE-1" / "SVC" / split / "img" / filename, image)
+        _write_png(root / "ROSE" / "ROSE-1" / "SVC" / split / "gt" / filename, mask)
+
+    manifest = load_rose_manifest(root)
+
+    assert len(manifest) == 2
+    assert set(manifest["official_split"]) == {"train", "test"}
+    assert set(manifest["label"]) == {"control"}
+    assert set(manifest["diagnosis"]) == {"control"}

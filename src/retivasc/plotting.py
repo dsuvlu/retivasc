@@ -8,13 +8,15 @@ from textwrap import fill
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from skimage import transform
+from skimage import io as skio
+from skimage import measure, transform
 from sklearn.calibration import calibration_curve
 from sklearn.metrics import brier_score_loss
 
+from retivasc.features import extract_vascular_features
 from retivasc.preprocess import ensure_grayscale, normalize_image, resize_mask_to_max_dim
 from retivasc.segment import classical_vesselness_mask
-from retivasc.skeleton import skeletonize_mask
+from retivasc.skeleton import branchpoint_mask, skeletonize_mask
 
 
 def _prepare_out_path(out_path: str | Path) -> Path:
@@ -105,6 +107,413 @@ def plot_feature_distributions(
     fig.tight_layout()
     fig.savefig(out, dpi=200, bbox_inches="tight")
     return fig
+
+
+def _format_feature_value(feature: str, value: float) -> str:
+    if feature == "vessel_density":
+        return f"{value:.1%}"
+    if feature == "connected_component_count":
+        return f"{value:.0f}"
+    if feature.endswith("_density"):
+        return f"{value:.4f}"
+    return f"{value:.3f}"
+
+
+def _segment_arc_chord_endpoints(coords: np.ndarray):
+    coord_set = {tuple(int(value) for value in coord) for coord in coords}
+    forward_neighbors = ((0, 1), (1, -1), (1, 0), (1, 1))
+    all_neighbors = (
+        (-1, -1),
+        (-1, 0),
+        (-1, 1),
+        (0, -1),
+        (0, 1),
+        (1, -1),
+        (1, 0),
+        (1, 1),
+    )
+
+    arc = 0.0
+    endpoints = []
+    for row, col in coord_set:
+        neighbor_count = sum(
+            (row + d_row, col + d_col) in coord_set for d_row, d_col in all_neighbors
+        )
+        if neighbor_count <= 1:
+            endpoints.append((row, col))
+        for d_row, d_col in forward_neighbors:
+            if (row + d_row, col + d_col) in coord_set:
+                arc += float(np.hypot(d_row, d_col))
+
+    candidates = np.asarray(endpoints if len(endpoints) >= 2 else coords, dtype=float)
+    if candidates.shape[0] < 2:
+        return arc, 0.0, None
+    deltas = candidates[:, None, :] - candidates[None, :, :]
+    distances = np.sqrt(np.sum(deltas * deltas, axis=2))
+    start_idx, end_idx = np.unravel_index(int(np.argmax(distances)), distances.shape)
+    chord = float(distances[start_idx, end_idx])
+    return arc, chord, (candidates[start_idx], candidates[end_idx])
+
+
+def _most_tortuous_segment(
+    skeleton: np.ndarray, *, min_segment_length: int = 5, min_chord: float = 0.0
+):
+    segment_labels = measure.label(skeleton & ~branchpoint_mask(skeleton), connectivity=2)
+    best_ratio = 0.0
+    best_mask = np.zeros_like(skeleton, dtype=bool)
+    best_endpoints = None
+
+    for region in measure.regionprops(segment_labels):
+        coords = region.coords
+        if coords.shape[0] < min_segment_length:
+            continue
+        arc, chord, endpoints = _segment_arc_chord_endpoints(coords)
+        if chord <= min_chord:
+            continue
+        ratio = arc / chord
+        if ratio > best_ratio:
+            best_ratio = float(ratio)
+            best_mask = segment_labels == region.label
+            best_endpoints = endpoints
+
+    return best_mask, best_endpoints, best_ratio
+
+
+def _boxcount_grid(mask: np.ndarray) -> tuple[int, np.ndarray]:
+    min_dim = min(mask.shape)
+    if min_dim <= 0:
+        return 1, np.zeros((1, 1), dtype=bool)
+    max_power = int(np.floor(np.log2(min_dim)))
+    size = int(2 ** max(3, max_power - 3))
+    size = max(4, min(size, min_dim))
+    rows = int(np.ceil(mask.shape[0] / size) * size)
+    cols = int(np.ceil(mask.shape[1] / size) * size)
+    padded = np.zeros((rows, cols), dtype=bool)
+    padded[: mask.shape[0], : mask.shape[1]] = mask
+    occupied = padded.reshape(rows // size, size, cols // size, size).any(axis=(1, 3))
+    return size, occupied
+
+
+def _draw_boxcount_visual(axis, mask: np.ndarray, *, title: str) -> None:
+    axis.imshow(mask, cmap="gray", interpolation="nearest")
+    size, occupied = _boxcount_grid(mask)
+    for box_row, box_col in np.argwhere(occupied):
+        axis.add_patch(
+            plt.Rectangle(
+                (box_col * size - 0.5, box_row * size - 0.5),
+                size,
+                size,
+                edgecolor="#00a6d6",
+                facecolor="none",
+                linewidth=0.7,
+                alpha=0.75,
+            )
+        )
+    axis.set_xlim(-0.5, mask.shape[1] - 0.5)
+    axis.set_ylim(mask.shape[0] - 0.5, -0.5)
+    axis.set_title(title)
+
+
+def plot_rose_feature_visuals(
+    image: np.ndarray,
+    manual_mask: np.ndarray,
+    out_path: str | Path,
+    *,
+    max_dim: int = 512,
+):
+    """Save feature-specific ROSE visuals from one OCTA image and manual mask."""
+    out = _prepare_out_path(out_path)
+    image = _resize_image_to_max_dim(image, max_dim)
+    mask = resize_mask_to_max_dim(ensure_grayscale(manual_mask) > 0, max_dim)
+    gray = normalize_image(ensure_grayscale(image))
+    skeleton = skeletonize_mask(mask)
+    branches = branchpoint_mask(skeleton)
+    branch_labels = measure.label(branches, connectivity=2)
+    branch_centroids = np.asarray(
+        [region.centroid for region in measure.regionprops(branch_labels)]
+    )
+    component_labels = measure.label(mask, connectivity=2)
+    component_display = np.ma.masked_where(component_labels == 0, component_labels)
+    min_tortuosity_chord = max(8.0, 0.03 * min(skeleton.shape))
+    min_tortuosity_length = max(10, int(0.04 * min(skeleton.shape)))
+    tortuous_segment, tortuous_endpoints, tortuous_value = _most_tortuous_segment(
+        skeleton,
+        min_segment_length=min_tortuosity_length,
+        min_chord=min_tortuosity_chord,
+    )
+    features = extract_vascular_features(mask)
+    value_text = {name: _format_feature_value(name, value) for name, value in features.items()}
+
+    fig = plt.figure(figsize=(13, 10.5), constrained_layout=True)
+    grid = fig.add_gridspec(3, 3, height_ratios=[0.9, 1.0, 1.0])
+    reference_axes = [
+        fig.add_subplot(grid[0, 0]),
+        fig.add_subplot(grid[0, 1]),
+        fig.add_subplot(grid[0, 2]),
+    ]
+    visual_axes = [
+        fig.add_subplot(grid[1, 0]),
+        fig.add_subplot(grid[1, 1]),
+        fig.add_subplot(grid[1, 2]),
+        fig.add_subplot(grid[2, 0]),
+        fig.add_subplot(grid[2, 1]),
+        fig.add_subplot(grid[2, 2]),
+    ]
+
+    reference_axes[0].imshow(gray, cmap="gray")
+    reference_axes[0].set_title("Original ROSE OCTA")
+    reference_axes[1].imshow(mask, cmap="gray", interpolation="nearest")
+    reference_axes[1].set_title("Manual vessel mask")
+
+    feature_lines = [
+        f"Vessel density: {value_text['vessel_density']}",
+        f"Skeleton length density: {value_text['skeleton_length_density']}",
+        f"Branchpoint density: {value_text['branchpoint_density']}",
+        f"Fractal dimension: {value_text['fractal_dimension_boxcount']}",
+        f"Mean segment tortuosity: {value_text['mean_segment_tortuosity']}",
+        f"Connected components: {value_text['connected_component_count']}",
+    ]
+    reference_axes[2].text(
+        0.0,
+        0.98,
+        "Feature values\n\n" + "\n".join(feature_lines),
+        ha="left",
+        va="top",
+        fontsize=10,
+        transform=reference_axes[2].transAxes,
+    )
+    reference_axes[2].text(
+        0.0,
+        0.08,
+        fill("Values come from the manual mask for this one image.", width=40),
+        ha="left",
+        va="bottom",
+        color="0.35",
+        fontsize=9,
+        transform=reference_axes[2].transAxes,
+    )
+
+    visual_axes[0].imshow(_mask_overlay(image, mask, (0.0, 0.75, 0.85)))
+    visual_axes[0].set_title(
+        "Vessel density\n"
+        f"vessel pixels: {value_text['vessel_density']}"
+    )
+
+    visual_axes[1].imshow(_mask_overlay(image, skeleton, (1.0, 0.78, 0.05)))
+    visual_axes[1].set_title(
+        "Skeleton length density\n"
+        f"centerline density: {value_text['skeleton_length_density']}"
+    )
+
+    visual_axes[2].imshow(_mask_overlay(image, skeleton, (0.85, 0.8, 0.2)))
+    if branch_centroids.size:
+        visual_axes[2].scatter(
+            branch_centroids[:, 1],
+            branch_centroids[:, 0],
+            s=11,
+            color="#e7292f",
+            edgecolors="white",
+            linewidths=0.25,
+        )
+    visual_axes[2].set_title(
+        "Branchpoint density\n"
+        f"junction density: {value_text['branchpoint_density']}"
+    )
+
+    _draw_boxcount_visual(
+        visual_axes[3],
+        mask,
+        title=(
+            "Fractal dimension\n"
+            f"box-count slope: {value_text['fractal_dimension_boxcount']}"
+        ),
+    )
+
+    visual_axes[4].imshow(_mask_overlay(image, skeleton, (0.8, 0.78, 0.2)))
+    if tortuous_segment.any():
+        visual_axes[4].imshow(
+            np.ma.masked_where(~tortuous_segment, tortuous_segment),
+            cmap="cool",
+            interpolation="nearest",
+            alpha=0.95,
+        )
+    if tortuous_endpoints is not None:
+        start, end = tortuous_endpoints
+        visual_axes[4].plot(
+            [start[1], end[1]],
+            [start[0], end[0]],
+            color="#00a6d6",
+            linestyle="--",
+            linewidth=1.8,
+        )
+        visual_axes[4].scatter(
+            [start[1], end[1]],
+            [start[0], end[0]],
+            s=24,
+            color="#00a6d6",
+            edgecolors="white",
+            linewidths=0.4,
+        )
+    title_value = value_text["mean_segment_tortuosity"]
+    if tortuous_value > 0:
+        title_value = f"mean {title_value}, shown {tortuous_value:.3f}"
+    visual_axes[4].set_title(f"Segment tortuosity\n{title_value}")
+
+    visual_axes[5].imshow(gray, cmap="gray", alpha=0.35)
+    visual_axes[5].imshow(component_display, cmap="tab20", interpolation="nearest", alpha=0.85)
+    visual_axes[5].set_title(
+        "Connected components\n"
+        f"components: {value_text['connected_component_count']}"
+    )
+
+    for axis in [*reference_axes, *visual_axes]:
+        axis.set_axis_off()
+
+    fig.suptitle("ROSE feature visual glossary", y=1.015)
+    fig.savefig(out, dpi=200, bbox_inches="tight")
+    return fig
+
+
+def plot_segmentation_comparison_grid(
+    benchmark_df: pd.DataFrame,
+    out_path: str | Path,
+    *,
+    method_order: list[str] | None = None,
+    max_cases: int = 2,
+    max_dim: int = 360,
+):
+    """Save a raw/manual/predicted-mask grid from a benchmark table."""
+    if benchmark_df.empty:
+        raise ValueError("benchmark_df is empty; cannot plot a comparison grid.")
+    required = {"image_path", "manual_mask_path", "method", "pred_mask_path"}
+    missing = sorted(required - set(benchmark_df.columns))
+    if missing:
+        msg = f"Missing benchmark columns: {', '.join(missing)}"
+        raise ValueError(msg)
+
+    out = _prepare_out_path(out_path)
+    method_order = method_order or [
+        "frangi",
+        "diffusion_threshold",
+        "random_walker",
+        "geodesic_voting",
+        "octa_net",
+        "u_net",
+        "nnunet",
+        "unet_lite",
+        "octa_net_lite",
+        "nnunet_lite",
+    ]
+    available_methods = [method for method in method_order if method in set(benchmark_df["method"])]
+    extra_methods = [
+        method
+        for method in benchmark_df["method"].dropna().unique()
+        if method not in available_methods
+    ]
+    methods = [*available_methods, *extra_methods]
+    if not methods:
+        raise ValueError("benchmark_df has no plottable methods.")
+
+    case_cols = ["image_path", "manual_mask_path"]
+    for optional_col in ("image_id", "subject_id", "layer", "label"):
+        if optional_col in benchmark_df.columns:
+            case_cols.append(optional_col)
+    cases = benchmark_df[case_cols].drop_duplicates().head(max_cases)
+    n_rows = len(cases)
+    n_cols = 2 + len(methods)
+    fig, axes = plt.subplots(
+        n_rows,
+        n_cols,
+        figsize=(2.25 * n_cols, 2.45 * n_rows),
+        squeeze=False,
+        constrained_layout=True,
+    )
+
+    for row_idx, (_, case) in enumerate(cases.iterrows()):
+        image = _resize_image_to_max_dim(skio.imread(case["image_path"]), max_dim)
+        manual_mask = resize_mask_to_max_dim(
+            ensure_grayscale(skio.imread(case["manual_mask_path"])) > 0,
+            max_dim,
+        )
+        case_title = _case_title(case)
+
+        axes[row_idx, 0].imshow(_display_image(image), cmap="gray")
+        axes[row_idx, 0].set_title(case_title if case_title else "Raw OCTA")
+        axes[row_idx, 1].imshow(_mask_overlay(image, manual_mask, (0.0, 0.75, 0.85)))
+        axes[row_idx, 1].set_title("Manual mask")
+
+        for method_idx, method in enumerate(methods, start=2):
+            axis = axes[row_idx, method_idx]
+            match = benchmark_df[
+                (benchmark_df["image_path"] == case["image_path"])
+                & (benchmark_df["manual_mask_path"] == case["manual_mask_path"])
+                & (benchmark_df["method"] == method)
+            ]
+            if match.empty:
+                _draw_missing_method(axis, method, "not run")
+                continue
+            result = match.iloc[0]
+            pred_path = result.get("pred_mask_path")
+            if pd.isna(pred_path) or not Path(str(pred_path)).exists():
+                reason = result.get("error", "missing prediction")
+                _draw_missing_method(axis, method, str(reason))
+                continue
+            pred_mask = resize_mask_to_max_dim(
+                ensure_grayscale(skio.imread(pred_path)) > 0,
+                max_dim,
+            )
+            axis.imshow(_mask_overlay(image, pred_mask, (1.0, 0.35, 0.08)))
+            axis.set_title(_method_title(method, result))
+
+    for axis in axes.ravel():
+        axis.set_axis_off()
+
+    fig.suptitle("ROSE segmentation comparator sample", y=1.02)
+    fig.savefig(out, dpi=200, bbox_inches="tight")
+    return fig
+
+
+def _case_title(case: pd.Series) -> str:
+    parts = []
+    for column in ("image_id", "layer", "label"):
+        value = case.get(column, None)
+        if pd.notna(value):
+            parts.append(str(value))
+    return "\n".join(parts[:2])
+
+
+def _method_title(method: str, result: pd.Series) -> str:
+    labels = {
+        "frangi": "Frangi",
+        "diffusion_threshold": "Diffusion",
+        "random_walker": "Random walker",
+        "geodesic_voting": "Geodesic",
+        "octa_net": "OCTA-Net",
+        "u_net": "U-Net",
+        "nnunet": "nnU-Net",
+        "unet_lite": "U-Net Lite",
+        "octa_net_lite": "OCTA-Net Lite",
+        "nnunet_lite": "nnU-Net Lite",
+    }
+    title = labels.get(method, method.replace("_", " ").title())
+    dice = result.get("dice", np.nan)
+    if pd.notna(dice):
+        title += f"\nDice {float(dice):.2f}"
+    return title
+
+
+def _draw_missing_method(axis, method: str, reason: str) -> None:
+    axis.text(
+        0.5,
+        0.5,
+        fill(reason, width=18),
+        ha="center",
+        va="center",
+        fontsize=8,
+        color="0.35",
+        transform=axis.transAxes,
+    )
+    axis.set_title(method.replace("_", " ").title())
 
 
 def _resize_image_to_max_dim(image: np.ndarray, max_dim: int) -> np.ndarray:

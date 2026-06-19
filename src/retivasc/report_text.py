@@ -11,8 +11,9 @@ ROSE_NO_PREDICTION_CAVEAT = (
     "but this demo deliberately does not use ROSE for predictive modeling, AUROC, or "
     "calibration. ROSE-1 is small and lacks the plasma, amyloid/tau, genomic, and "
     "longitudinal context needed for any ADRD biomarker claim, so all ROSE analyses here "
-    "are exploratory computer-vision sanity checks. Labels are used only if explicitly "
-    "supplied in a local manifest; none are inferred from filenames."
+    "are exploratory computer-vision sanity checks. The official ROSE-1 layout is "
+    "annotated with disease/control labels from the published AD/control cohort ordering, "
+    "but those labels are used only for exploratory grouping."
 )
 
 FIVES_SPLIT_CAVEAT = (
@@ -29,4 +30,13 @@ FIVES_SPLIT_CAVEAT = (
 FEATURE_SCALING_CAVEAT = (
     "Cross-cohort, cross-device, and cross-species use will require pixel-size or "
     "field-of-view normalization before interpreting absolute feature magnitudes."
+)
+
+EARLY_VS_LATE_BIOMARKER_NOTE = (
+    "Reagan et al. 2025 ranks the vascular findings by timing: tortuosity "
+    "occurrences and arteriovenous crossing events appear by 6 months, and "
+    "arteriole/venule caliber asymmetry appears by 6 months before density changes. "
+    "Vessel density and major branching change later at 12 months and the authors "
+    "describe density as a weak early biomarker. Fractal dimension is retained here "
+    "as external retinal-imaging context, not as a measured phenotype from that paper."
 )

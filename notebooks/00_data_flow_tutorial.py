@@ -80,13 +80,28 @@ def _(
     skio,
     transform,
 ):
-    def load_or_error(loader, root: Path):
+    def load_or_error(loader, root: Path, **kwargs):
         try:
-            return loader(root), None
+            return loader(root, **kwargs), None
         except DataNotFoundError as exc:
             return None, str(exc)
         except ValueError as exc:
             return None, str(exc)
+
+    def load_rose_for_demo(loader, root: Path):
+        manifest, error = load_or_error(loader, root)
+        if manifest is not None or error is None:
+            return manifest, error
+        manifest, fallback_error = load_or_error(loader, root, require_split_safe=False)
+        if manifest is None:
+            return None, fallback_error or error
+        warning = (
+            "Loaded for non-split-sensitive demonstration only. "
+            "Add a local manifest.csv with explicit subject_id and split_group columns "
+            "before ROSE split-sensitive analysis.\n\n"
+            f"{error}"
+        )
+        return manifest, warning
 
     def manifest_summary(name: str, root: Path, manifest: pd.DataFrame | None, error: str | None):
         if manifest is None:
@@ -114,6 +129,8 @@ def _(
             lines.append(f"- Unique `subject_id`: `{manifest['subject_id'].nunique()}`")
         if "split_group" in manifest.columns:
             lines.append(f"- Unique `split_group`: `{manifest['split_group'].nunique()}`")
+        if error is not None:
+            lines.extend(["", "### Warning", "", "```text", error, "```"])
         return "\n".join(lines)
 
     def choose_sample(manifest: pd.DataFrame | None, *, prefer_layer: str | None = None):
@@ -166,14 +183,21 @@ def _(
         plt.close(fig)
         return out_path, features
 
-    return choose_sample, feature_markdown, load_or_error, manifest_summary, plot_data_flow
+    return (
+        choose_sample,
+        feature_markdown,
+        load_or_error,
+        load_rose_for_demo,
+        manifest_summary,
+        plot_data_flow,
+    )
 
 
 @app.cell
-def _(Path, load_fives_manifest, load_or_error, load_rose_manifest):
+def _(Path, load_fives_manifest, load_or_error, load_rose_for_demo, load_rose_manifest):
     rose_root = Path("data/raw/rose")
     fives_root = Path("data/raw/fives")
-    rose_manifest, rose_error = load_or_error(load_rose_manifest, rose_root)
+    rose_manifest, rose_error = load_rose_for_demo(load_rose_manifest, rose_root)
     fives_manifest, fives_error = load_or_error(load_fives_manifest, fives_root)
     return fives_error, fives_manifest, fives_root, rose_error, rose_manifest, rose_root
 

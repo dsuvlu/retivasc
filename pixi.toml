@@ -22,6 +22,7 @@ pytest = "*"
 ruff = "*"
 tqdm = "*"
 rich = "*"
+pytorch = ">=2.12.0,<3"
 
 [pypi-dependencies]
 retivasc = { path = ".", editable = true }
@@ -33,5 +34,8 @@ format = "ruff format src tests notebooks"
 tutorial = "marimo run notebooks/00_data_flow_tutorial.py"
 rose-demo = "marimo run notebooks/01_rose_octa_feature_demo.py"
 fives-demo = "marimo run notebooks/02_fives_modeling_calibration_demo.py"
+rose-embeddings = "marimo run notebooks/04_rose_mask_embeddings.py"
+rose-layer-stats = "marimo export html notebooks/04_rose_layer_aware_feature_statistics.py -o /tmp/rose_layer_aware_feature_statistics.html --no-include-code"
+rose-layer-report = "marimo export html notebooks/04_rose_layer_aware_feature_statistics.py -o reports/rose_layer_aware_statistics_notebook.html --no-include-code"
 report = "python -m retivasc.report_html"
 check = { depends-on = ["lint", "test"] }

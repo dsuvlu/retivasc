@@ -61,6 +61,7 @@ pixi run test
 pixi run tutorial
 pixi run rose-demo
 pixi run fives-demo
+pixi run rose-embeddings
 pixi run report
 ```
 
@@ -71,13 +72,65 @@ ROSE-derived visual panels are generated locally and are not committed or publis
 by default. Public reports use a schematic or placeholder unless redistribution of
 image examples is permitted by the dataset terms.
 
+## Optional Deep Segmentation Comparisons
+
+The ROSE notebook can compare the classical methods against prediction masks from
+official external tools or against small in-repo U-Net-family demo comparators.
+
+Generate local demo predictions with the Pixi environment:
+
+```bash
+pixi run python -m retivasc.deep_models --rose-root data/raw/rose
+```
+
+This writes cached masks and manifests under `data/interim/`, including
+`data/interim/rose_inrepo_deep_predictions.csv`. The notebook picks those up and
+adds U-Net Lite, OCTA-Net Lite, and nnU-Net Lite rows to the same metric table and
+comparison figure. The command also tunes threshold and light morphology on the ROSE
+tuning rows before writing held-out prediction masks. These local models are demo
+comparators; they are not the official OCTA-Net or nnU-Net implementations.
+
+For official OCTA-Net or nnU-Net comparisons, run those frameworks in their own
+environment and provide prediction CSVs under `data/interim/` with `image_id` plus
+`octa_net_prediction_path` or `nnunet_prediction_path`.
+
+## ROSE Mask Embeddings
+
+`pixi run rose-embeddings` opens a Marimo notebook that computes mask-derived
+vascular feature embeddings for ROSE-1. The workflow uses vessel masks, not raw OCTA
+intensity images, and writes local PCA, UMAP, and t-SNE figures plus a summary report
+under `figures/` and `reports/`. These ROSE-derived artifacts are ignored by Git.
+
+## ROSE Layer-Aware Statistics
+
+`pixi run rose-layer-stats` runs a follow-up Marimo workflow that summarizes ROSE-1
+mask-derived vascular features at the subject and OCTA-layer levels. It writes local
+CSV tables under `outputs/rose_layer_stats/`, figures under `figures/`, and an HTML
+report at `reports/rose_layer_aware_statistics.html`. This analysis reports
+exploratory effect sizes, bootstrap confidence intervals, paired layer contrasts,
+outlier sensitivity, and mask-artifact checks; it does not train a ROSE classifier or
+make an AD diagnostic claim.
+
 ## Expected Outputs
 
 ```text
 figures/rose_pipeline_panel.png
 figures/rose_feature_distributions.png
+figures/rose_model_comparison_grid.png
+figures/rose_mask_embeddings_pca.png
+figures/rose_mask_embeddings_umap.png
+figures/rose_mask_embeddings_tsne.png
+figures/rose_mask_embedding_feature_loadings.png
+figures/rose_subject_level_pca.png
+figures/rose_layer_effect_sizes.png
+figures/rose_layer_contrast_effect_sizes.png
+figures/rose_outlier_audit_panel.png
+figures/rose_feature_qc_heatmap.png
+figures/rose_mask_artifact_audit.png
 figures/processing_example_panel.png
 figures/fives_calibration_demo.png
+reports/rose_mask_embedding_report.html
+reports/rose_layer_aware_statistics.html
 reports/retivasc_pi_demo.html
 reports/data_audit_flow.html
 docs/index.html
@@ -102,10 +155,11 @@ ROSE-1 is documented as an AD/control OCTA subset in the published dataset, but
 this demo deliberately does not use ROSE for predictive modeling, AUROC, or
 calibration. ROSE-1 is small and lacks the plasma, amyloid/tau, genomic, and
 longitudinal context needed for any ADRD biomarker claim, so all ROSE analyses
-here are exploratory computer-vision sanity checks. Labels are used only if
-explicitly supplied in a local manifest; none are inferred from filenames. FIVES
-is not ADRD; it is used only to demonstrate modeling and calibration discipline on
-a larger fundus dataset when valid labels are available. Cross-cohort,
+here are exploratory computer-vision sanity checks. The official ROSE-1 layout is
+annotated with disease/control labels from the published AD/control cohort
+ordering, but those labels are used only for exploratory grouping. FIVES is not
+ADRD; it is used only to demonstrate modeling and calibration discipline on a
+larger fundus dataset when valid labels are available. Cross-cohort,
 cross-device, and cross-species use will require pixel-size or field-of-view
 normalization before interpreting absolute feature magnitudes. No synthetic plasma
 biomarker results are generated.

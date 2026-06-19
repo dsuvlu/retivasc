@@ -18,7 +18,10 @@ dataset,subject_id,image_id,image_path,mask_path,modality,layer,split_group
 ```
 
 `label` may be supplied when clinical labels are explicitly available in a local
-manifest. The loader does not infer ROSE AD/control status from filenames.
+manifest. For the official ROSE-1 layout, the loader records the published
+Alzheimer's disease/control cohort labels from the official subject ordering:
+train 1-20 disease, train 21-30 control, test 1-6 disease, and test 7-9 control.
+It does not infer ROSE labels from arbitrary filenames.
 
 FIVES manifest columns:
 

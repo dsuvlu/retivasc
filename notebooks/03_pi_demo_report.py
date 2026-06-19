@@ -45,19 +45,17 @@ def _(mo):
 
 @app.cell
 def _(ROSE_MANUAL_MASK_CAVEAT, ROSE_NO_PREDICTION_CAVEAT, mo):
-    mo.md(
-        f"""
-        ## Project Fit
+    mo.md(f"""
+    ## Project Fit
 
-        The package connects retinal vascular image analysis to a future Roux/JAX workflow
-        involving human retinal imaging, plasma biomarkers, genomic context, clinical
-        covariates, and Howell-lab mouse retinal images.
+    The package connects retinal vascular image analysis to a future Roux/JAX workflow
+    involving human retinal imaging, plasma biomarkers, genomic context, clinical
+    covariates, and Howell-lab mouse retinal images.
 
-        {ROSE_MANUAL_MASK_CAVEAT}
+    {ROSE_MANUAL_MASK_CAVEAT}
 
-        {ROSE_NO_PREDICTION_CAVEAT}
-        """
-    )
+    {ROSE_NO_PREDICTION_CAVEAT}
+    """)
     return
 
 

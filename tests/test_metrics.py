@@ -1,6 +1,14 @@
 import numpy as np
 
-from retivasc.metrics import dice_score, iou_score, sensitivity, specificity
+from retivasc.metrics import (
+    dice_score,
+    iou_score,
+    precision_score_binary,
+    recall_score_binary,
+    sensitivity,
+    specificity,
+    specificity_score_binary,
+)
 
 
 def test_dice_identical_mask_is_one():
@@ -36,6 +44,19 @@ def test_sensitivity_specificity_known_arrays():
 
     assert sensitivity(y_true, y_pred) == 0.5
     assert specificity(y_true, y_pred) == 0.5
+    assert precision_score_binary(y_true, y_pred) == 0.5
+    assert recall_score_binary(y_true, y_pred) == 0.5
+    assert specificity_score_binary(y_true, y_pred) == 0.5
+
+
+def test_metric_mask_excludes_pixels_outside_field_of_view():
+    y_true = np.array([[1, 0, 0, 0]], dtype=bool)
+    y_pred = np.array([[1, 1, 0, 0]], dtype=bool)
+    fov = np.array([[1, 1, 0, 0]], dtype=bool)
+
+    assert specificity(y_true, y_pred) == 2 / 3
+    assert specificity(y_true, y_pred, mask=fov) == 0.0
+    assert specificity_score_binary(y_true, y_pred, mask=fov) == 0.0
 
 
 def test_sensitivity_empty_positive_convention_is_one():
