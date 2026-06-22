@@ -166,8 +166,6 @@ biomarker results are generated.
 
 ## References
 
-- Northeastern/Roux/JAX postdoctoral research fellow ad:
-  https://northeastern.wd1.myworkdayjobs.com/en-US/careers/job/Portland-ME/Postdoctoral-Research-Fellow_R140142?q=postdoctoral+fellow
 - Reagan AM, MacLean M, Cossette TL, Howell GR. 2025. Retinal vascular dysfunction
   in the Mthfr677C>T mouse model of cerebrovascular disease.
   https://pubmed.ncbi.nlm.nih.gov/40741711/
