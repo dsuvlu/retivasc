@@ -10,35 +10,44 @@ The ROSE-1 mask-derived embedding workflow ran on:
 - 26 AD and 13 control subjects per layer
 
 The PCA embedding used mask-derived vascular features, not raw OCTA image intensity.
-PC1 explained 45.6% of scaled feature variance and PC2 explained 26.6%, for about
-72.1% across the first two principal components.
+After the paper-aligned feature refactor and ROSE rerun, PC1 explained 42.7% of
+scaled feature variance and PC2 explained 19.6%, for about 62.4% across the first
+two principal components.
 
 The current embeddings do not show clear AD/control separation. PCA and t-SNE both
 show substantial overlap between groups:
 
-- PCA centroid permutation p-value: ~0.52
-- PCA silhouette score: ~0.05
-- t-SNE centroid permutation p-value: ~0.53
+- PCA centroid permutation p-value: ~0.58
+- PCA silhouette score: ~0.03
+- t-SNE centroid permutation p-value: ~0.62
 - t-SNE silhouette score: ~0.005
+- Subject-level, layer-aware PCA centroid permutation p-value: ~0.81
+- Subject-level, layer-aware PCA silhouette score: ~-0.03
 
 UMAP was not run because `umap-learn` is not installed; the notebook generated an
 informative placeholder figure.
 
 ## Feature Drivers
 
-The strongest PCA loading directions were:
+The strongest row-level PCA loading directions were:
 
-- PC1: mostly mean tortuosity, small-component fraction, and segment length features.
-- PC2: mostly small-component fraction and tortuosity in the opposite direction.
+- PC1: mostly small-component fraction, orientation entropy, segment length, and
+  largest-component fraction.
+- PC2: mostly mean tortuosity, high-tortuosity fraction, and small-component
+  fraction in the opposite direction.
 
-The DVC layer shows more spread than SVC and SVC+DVC, including at least one clear
-outlier. This suggests that layer-specific mask morphology, annotation/acquisition
-effects, or outlier masks may dominate the current embedding more than diagnosis.
+The subject-level, layer-aware PCA is dominated by cross-layer largest-component
+fraction, dropout-style proxies, and tortuosity-range terms rather than a disease
+axis. This suggests that layer-specific mask morphology, annotation/acquisition
+effects, or outlier masks still dominate the current embedding more than diagnosis.
 
-Group-average feature values were directionally similar. Controls were slightly higher
-on vessel area fraction, skeleton length density, branchpoint density, fractal
-dimension, and orientation entropy, but the differences are small and should not be
-interpreted as biological evidence from this analysis alone.
+Group-average feature values remain directionally similar. The largest exploratory
+effect sizes are still modest and unstable after multiplicity correction. Controls
+are slightly higher on SVC/SVC+DVC density, skeleton length, branchpoint density,
+and fractal dimension; AD is slightly higher on SVC+DVC small-component fraction.
+DVC mean tortuosity is lower in AD than controls in this run. None of these effects
+survive the permutation/FDR checks, so they should not be interpreted as biological
+evidence from this analysis alone.
 
 ## Current Interpretation
 
@@ -48,7 +57,8 @@ The honest conclusion is:
 > the current ROSE-1 mask features do not provide convincing exploratory evidence of
 > AD/control separation. The visible variation is more consistent with layer-specific
 > mask morphology, annotation/acquisition differences, and outliers than a robust
-> disease-group pattern.
+> disease-group pattern. The paper-aligned ROSE feature refactor changes which
+> features drive the unsupervised axes, but not the main conclusion.
 
 The effective sample size is 39 subjects, not 117 independent observations, because
 each subject contributes multiple layers.

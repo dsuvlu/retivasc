@@ -24,6 +24,10 @@ docs/*_handoff_plan.md
 docs/*_dev_plan.md
 docs/*_implementation_plan.md
 
+# Kept locally, not tracked in the repo.
+/FEATURE_ROADMAP.md
+docs/rose_mask_embedding_interpretation.md
+
 # Do not commit raw or derived medical-image data.
 data/raw/
 data/interim/
@@ -35,3 +39,4 @@ reports/rose_mask_embedding*
 reports/rose_layer_aware_statistics*.html
 reports/rose_outlier_audit.html
 outputs/
+exports/
